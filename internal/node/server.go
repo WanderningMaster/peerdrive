@@ -3,6 +3,7 @@ package node
 import (
 	"bufio"
 	"context"
+	"encoding/hex"
 	"encoding/json"
 	"log"
 	"net"
@@ -60,7 +61,10 @@ func (n *Node) handleConn(c net.Conn) {
 		n.storeMu.Unlock()
 		_ = enc.Encode(rpc.RpcMessage{Type: rpc.Store, From: n.Contact()})
 	case rpc.FindNode:
-		target := id.HashKey(m.Key)
+		var target id.NodeID
+		if b, err := hex.DecodeString(m.Key); err == nil && len(b) == len(target) {
+			copy(target[:], b)
+		}
 		nodes := n.rt.Closest(target, defaults.KBucketK)
 		_ = enc.Encode(rpc.RpcMessage{Type: rpc.FindNode, From: n.Contact(), Nodes: nodes})
 	case rpc.FindValue:

@@ -16,8 +16,8 @@ func Default() Config {
 	return Config{
 		IdBits:     256,
 		KBucketK:   20,
-		Alpha:      3,
-		Replicas:   3,
-		RpcTimeout: 2 * time.Second,
+		Alpha:      5,
+		Replicas:   5,
+		RpcTimeout: 3 * time.Second,
 	}
 }

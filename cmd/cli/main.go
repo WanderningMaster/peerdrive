@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"flag"
 	"fmt"
 	"io"
@@ -9,12 +8,10 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"os/signal"
 	"strings"
-	"syscall"
 
 	cmd "github.com/WanderningMaster/peerdrive/cmd/http"
-	"github.com/WanderningMaster/peerdrive/internal/node"
+	"github.com/WanderningMaster/peerdrive/configuration"
 )
 
 func main() {
@@ -24,10 +21,8 @@ func main() {
 	}
 	sub := os.Args[1]
 	switch sub {
-	case "serve-http":
+	case "init":
 		serveHTTP(os.Args[2:])
-	case "serve":
-		serve(os.Args[2:])
 	case "put":
 		putHTTP(os.Args[2:])
 	case "get":
@@ -41,63 +36,35 @@ func main() {
 func usage() {
 	fmt.Println(`peerdrive <command> [flags]
 Commands:
-serve-http Run a node and start the built-in HTTP Client (/id, /put, /get)
-serve Run a node (no HTTP)
+init Run a node and start the built-in HTTP Client (/id, /put, /get)
 put Use to store key/value on a running node
 get Use to fetch value from a running node
 Use -h after a command for flags.`)
 }
 
 func serveHTTP(args []string) {
-	fs := flag.NewFlagSet("serve-http", flag.ExitOnError)
-	addr := fs.String("addr", "127.0.0.1:9001", "TCP listen address (node)")
-	boot := fs.String("bootstrap", "", "comma-separated peers to bootstrap (host:port)")
-	fs.Parse(args)
-	cmd.BootstrapHttpClient(addr, boot)
-}
-
-func serve(args []string) {
-	fs := flag.NewFlagSet("serve", flag.ExitOnError)
-	addr := fs.String("addr", "127.0.0.1:9001", "TCP listen address (node)")
+	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	boot := fs.String("bootstrap", "", "comma-separated peers to bootstrap (host:port)")
 	fs.Parse(args)
 
-	n := node.NewNode(*addr)
-	ctx, cancel := context.WithCancel(context.Background())
-	defer cancel()
+	conf := configuration.LoadUserConfig()
 
-	if *boot != "" {
-		peers := splitCSV(*boot)
-		go n.Bootstrap(ctx, peers)
-	}
+	cmd.BootstrapHttpClient(conf, boot)
 
-	// Graceful shutdown
-	go func() {
-		ch := make(chan os.Signal, 1)
-		signal.Notify(ch, syscall.SIGINT, syscall.SIGTERM)
-		<-ch
-		cancel()
-	}()
-
-	if err := n.ListenAndServe(ctx); err != nil {
-		log.Fatal(err)
-	}
 }
 
 func putHTTP(args []string) {
+	conf := configuration.LoadUserConfig()
+
 	fs := flag.NewFlagSet("put", flag.ExitOnError)
-	base := fs.String("http", "", "base URL of running node HTTP endpoint (e.g., http://127.0.0.1:8081)")
 	key := fs.String("key", "", "key (string; passed as-is to server)")
 	val := fs.String("value", "", "value")
 	fs.Parse(args)
-	if *base == "" {
-		log.Fatal("-http is required (e.g., -http http://127.0.0.1:8081)")
-	}
 	if *key == "" {
 		log.Fatal("-key is required")
 	}
 
-	u, err := url.Parse(*base)
+	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
 	if err != nil {
 		log.Fatal(err)
 	}
@@ -120,18 +87,16 @@ func putHTTP(args []string) {
 }
 
 func getHTTP(args []string) {
+	conf := configuration.LoadUserConfig()
+
 	fs := flag.NewFlagSet("get", flag.ExitOnError)
-	base := fs.String("http", "", "base URL of running node HTTP endpoint (e.g., http://127.0.0.1:8082)")
 	key := fs.String("key", "", "key (string; passed as-is to server)")
 	fs.Parse(args)
-	if *base == "" {
-		log.Fatal("-http is required (e.g., -http http://127.0.0.1:8082)")
-	}
 	if *key == "" {
 		log.Fatal("-key is required")
 	}
 
-	u, err := url.Parse(*base)
+	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
 	if err != nil {
 		log.Fatal(err)
 	}

@@ -3,6 +3,7 @@ module github.com/WanderningMaster/peerdrive
 go 1.24.5
 
 require (
+	github.com/coreos/go-systemd/v22 v22.6.0
 	github.com/fxamacker/cbor/v2 v2.9.0
 	github.com/multiformats/go-multibase v0.2.0
 	lukechampine.com/blake3 v1.4.1

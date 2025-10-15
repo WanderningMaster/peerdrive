@@ -92,7 +92,6 @@ func DecodeBlock(raw []byte) (*Block, error) {
 		return nil, err
 	}
 
-	// Decode the first CBOR item into RawMessage to capture exact header bytes.
 	var rawHdr cbor.RawMessage
 	if err := decMode.NewDecoder(bytes.NewReader(raw)).Decode(&rawHdr); err != nil {
 		return nil, fmt.Errorf("decode header: %w", err)
@@ -102,7 +101,6 @@ func DecodeBlock(raw []byte) (*Block, error) {
 		return nil, errors.New("bad header length")
 	}
 
-	// Unmarshal the header bytes into the struct (uses same DecMode).
 	var hdr BlockHeader
 	if err := decMode.Unmarshal(rawHdr, &hdr); err != nil {
 		return nil, fmt.Errorf("decode header: %w", err)

@@ -9,6 +9,8 @@ const (
 	Store     RpcType = "STORE"
 	FindNode  RpcType = "FIND_NODE"
 	FindValue RpcType = "FIND_VALUE"
+
+	FetchBlock RpcType = "FETCH_BLOCK"
 )
 
 type RpcMessage struct {

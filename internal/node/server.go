@@ -5,10 +5,12 @@ import (
 	"context"
 	"encoding/hex"
 	"encoding/json"
+	"fmt"
 	"log"
 	"net"
 
 	"github.com/WanderningMaster/peerdrive/configuration"
+	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/id"
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
 )
@@ -80,5 +82,33 @@ func (n *Node) handleConn(c net.Conn) {
 		}
 		nodes := n.rt.Closest(id.HashKey(m.Key), defaults.KBucketK)
 		_ = enc.Encode(rpc.RpcMessage{Type: rpc.FindValue, From: n.Contact(), Found: false, Nodes: nodes})
+	case rpc.FetchBlock:
+		if m.Key == "" {
+			return
+		}
+		cid, err := block.DecodeCID(m.Key)
+		if err != nil {
+			fmt.Println("FetchBlock", err)
+			return
+		}
+		if n.blockProv == nil {
+			_ = enc.Encode(rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: false})
+			return
+		}
+		blk, err := n.blockProv.GetBlockLocal(context.TODO(), cid)
+		if err != nil {
+			fmt.Println("FetchBlock", err)
+			return
+		}
+		if blk == nil {
+			_ = enc.Encode(rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: false})
+			return
+		}
+		err = blk.Serialize()
+		if err != nil {
+			fmt.Println("FetchBlock", err)
+			return
+		}
+		_ = enc.Encode(rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: true, Value: blk.Bytes})
 	}
 }

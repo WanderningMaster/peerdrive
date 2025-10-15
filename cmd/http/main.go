@@ -6,12 +6,30 @@ import (
 	"io"
 	"log"
 	"net/http"
+	"os"
 	"strings"
 
+	"github.com/WanderningMaster/peerdrive/configuration"
+	"github.com/WanderningMaster/peerdrive/internal/block"
+	blockfetcher "github.com/WanderningMaster/peerdrive/internal/block-fetcher"
+	"github.com/WanderningMaster/peerdrive/internal/dag"
 	"github.com/WanderningMaster/peerdrive/internal/node"
+	"github.com/WanderningMaster/peerdrive/internal/storage"
+	daemon "github.com/coreos/go-systemd/v22/daemon"
 )
 
-func startHTTP(n *node.Node, httpPort string) {
+func startHTTP(n *node.Node, httpPort int) {
+	fetcher := blockfetcher.New(n)
+	blockstore := storage.NewMemStore(storage.WithFetcher(fetcher))
+	n.SetBlockProvider(blockstore)
+
+	builder := dag.DagBuilder{
+		ChunkSize: 1 << 20,
+		Fanout:    256,
+		Codec:     "cbor",
+		Store:     blockstore,
+	}
+
 	mux := http.NewServeMux()
 	mux.HandleFunc("/id", func(w http.ResponseWriter, r *http.Request) {
 		_, _ = io.WriteString(w, fmt.Sprintf("%s\n", n.ID.String()))
@@ -36,18 +54,66 @@ func startHTTP(n *node.Node, httpPort string) {
 			http.Error(w, "key required", 400)
 			return
 		}
-		val, err := n.Get(r.Context(), key)
-		if err != nil {
-			http.Error(w, err.Error(), 404)
+		vals := n.GetAll(r.Context(), key)
+		for _, val := range vals {
+			_, _ = io.WriteString(w, string(val)+"\n")
+		}
+	})
+
+	mux.HandleFunc("/dfs/{cid}", func(w http.ResponseWriter, r *http.Request) {
+		cidStr := r.PathValue("cid")
+		outPath := r.URL.Query().Get("out")
+		if outPath == "" {
+			http.Error(w, "out required", 400)
 			return
 		}
-		_, _ = io.WriteString(w, string(val)+"\n")
+
+		cid, err := block.DecodeCID(cidStr)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+
+		b, err := dag.Fetch(context.TODO(), blockstore, cid)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		err = os.WriteFile(outPath, b, 0644)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		_, _ = io.WriteString(w, "ok\n")
 	})
-	go func() { _ = http.ListenAndServe(httpPort, mux) }()
+	mux.HandleFunc("/dfs/put", func(w http.ResponseWriter, r *http.Request) {
+		inPath := r.URL.Query().Get("in")
+		if inPath == "" {
+			http.Error(w, "in required", 400)
+			return
+		}
+
+		inFile, err := os.Open(inPath)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		_, cid, err := builder.BuildFromReader(context.TODO(), "example.txt", inFile)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
+		}
+		cidStr, _ := cid.Encode()
+		defer inFile.Close()
+
+		_, _ = io.WriteString(w, fmt.Sprintf("%s\n", cidStr))
+	})
+	go func() { _ = http.ListenAndServe(fmt.Sprintf(":%d", httpPort), mux) }()
 }
 
-func BootstrapHttpClient(addr *string, boot *string) {
-	n := node.NewNode(*addr)
+func BootstrapHttpClient(conf *configuration.UserConfig, boot *string) {
+	tcpAddr := fmt.Sprintf("0.0.0.0:%d", conf.TcpPort)
+	n := node.NewNodeWithId(tcpAddr, conf.NodeId)
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
@@ -58,14 +124,7 @@ func BootstrapHttpClient(addr *string, boot *string) {
 		}
 	}()
 
-	// Simple HTTP helper on 808x: port = 808 + last digit(s) of tcp port
-	httpPort := ":8081"
-	if p := strings.Split(*addr, ":"); len(p) == 2 {
-		if len(p[1]) >= 2 {
-			httpPort = ":8" + p[1][1:]
-		}
-	}
-	startHTTP(n, httpPort)
+	startHTTP(n, conf.HttpPort)
 
 	// Bootstrap if provided
 	if *boot != "" {
@@ -75,6 +134,9 @@ func BootstrapHttpClient(addr *string, boot *string) {
 		}
 		n.Bootstrap(ctx, peers)
 	}
+
+	ok, err := daemon.SdNotify(false, daemon.SdNotifyReady)
+	fmt.Println(ok, err)
 
 	// Keep alive
 	select {}

@@ -1,0 +1,13 @@
+[Unit]
+Description=Peer Drive Daemon
+After=network.target
+
+[Service]
+TimeoutStartSec=30s
+Type=notify
+ExecStart=/usr/local/bin/peerdrive init
+Restart=on-failure
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

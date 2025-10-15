@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"math/big"
 	"net"
 	"sort"
@@ -12,6 +13,7 @@ import (
 	"time"
 
 	"github.com/WanderningMaster/peerdrive/configuration"
+	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/id"
 	"github.com/WanderningMaster/peerdrive/internal/routing"
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
@@ -71,7 +73,7 @@ func (n *Node) Store(ctx context.Context, key string, value []byte) error {
 	n.storeMu.Unlock()
 
 	// Find k closest peers
-	peers := n.iterativeFindNode(ctx, id.HashKey(key), defaults.KBucketK)
+	peers := n.IterativeFindNode(ctx, id.HashKey(key), defaults.KBucketK)
 	// Send to up to "replicas" peers
 	for i := 0; i < len(peers) && i < defaults.Replicas; i++ {
 		_, err := n.DialRpc(ctx, peers[i].Addr, rpc.RpcMessage{Type: rpc.Store, From: n.Contact(), Key: key, Value: value})
@@ -145,7 +147,70 @@ func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
 	return nil, errors.New("not found")
 }
 
-func (n *Node) iterativeFindNode(ctx context.Context, target id.NodeID, want int) []routing.Contact {
+func (n *Node) GetAll(ctx context.Context, key string) [][]byte {
+	defaults := configuration.Default()
+
+	founds := [][]byte{}
+	// Check local
+	n.storeMu.RLock()
+	if v, ok := n.store[key]; ok {
+		founds = append(founds, v)
+	}
+	n.storeMu.RUnlock()
+	// Ask peers
+	visited := make(map[string]bool)
+	target := id.HashKey(key)
+	cands := n.rt.Closest(target, defaults.Alpha)
+	for len(cands) > 0 {
+		next := cands
+		if len(next) > defaults.Alpha {
+			next = next[:defaults.Alpha]
+		}
+		var mu sync.Mutex
+		var found []byte
+		var wg sync.WaitGroup
+		for _, peer := range next {
+			if visited[peer.Addr] {
+				continue
+			}
+			visited[peer.Addr] = true
+			wg.Add(1)
+			go func(p routing.Contact) {
+				defer wg.Done()
+				m, err := n.DialRpc(ctx, p.Addr, rpc.RpcMessage{Type: rpc.FindValue, From: n.Contact(), Key: key})
+				if err != nil {
+					return
+				}
+				n.rt.Update(m.From)
+				if m.Found {
+					mu.Lock()
+					if found == nil {
+						found = append([]byte(nil), m.Value...)
+					}
+					mu.Unlock()
+					return
+				}
+				mu.Lock()
+				cands = append(cands, m.Nodes...)
+				mu.Unlock()
+			}(peer)
+		}
+		wg.Wait()
+		if found != nil {
+			founds = append(founds, found)
+		}
+		// Deduplicate and sort cands by distance
+		cands = uniqAndSortByDist(cands, target, visited)
+		// Trim to kBucketK to bound growth
+		if len(cands) > defaults.KBucketK {
+			cands = cands[:defaults.KBucketK]
+		}
+	}
+
+	return founds
+}
+
+func (n *Node) IterativeFindNode(ctx context.Context, target id.NodeID, want int) []routing.Contact {
 	defaults := configuration.Default()
 
 	visited := make(map[string]bool)
@@ -196,6 +261,22 @@ func (n *Node) iterativeFindNode(ctx context.Context, target id.NodeID, want int
 		shortlist = shortlist[:want]
 	}
 	return shortlist
+}
+
+func (n *Node) FetchBlock(ctx context.Context, addr string, cid block.CID) ([]byte, error) {
+	key, err := cid.Encode()
+	if err != nil {
+		return nil, err
+	}
+	m, err := n.DialRpc(ctx, addr, rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Key: key})
+	if err != nil {
+		return nil, err
+	}
+	if !m.Found {
+		return nil, fmt.Errorf("Block not found")
+	}
+
+	return m.Value, nil
 }
 
 func bestDist(cs []routing.Contact, target id.NodeID) *big.Int {

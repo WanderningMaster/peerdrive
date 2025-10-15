@@ -1,0 +1,53 @@
+package node
+
+import (
+	"bytes"
+	"context"
+	"fmt"
+
+	"github.com/WanderningMaster/peerdrive/internal/block"
+	"github.com/WanderningMaster/peerdrive/internal/util"
+	"github.com/fxamacker/cbor/v2"
+)
+
+type ProviderRecord struct {
+	V      uint8  `cbor:"v"`
+	CID    []byte `cbor:"cid"`
+	PeerID []byte `cbor:"peer"`
+	Addr   []byte `cbor:"addrs"`
+}
+
+func (ps *Node) PutProviderRecord(ctx context.Context, cid block.CID) error {
+	rec := ProviderRecord{
+		V:      0,
+		CID:    cid.ToBytes(),
+		PeerID: ps.ID[:],
+		Addr:   []byte(ps.Addr),
+	}
+
+	enc := util.Must(cbor.CanonicalEncOptions().EncMode())
+	var buf bytes.Buffer
+	if err := enc.NewEncoder(&buf).Encode(rec); err != nil {
+		return fmt.Errorf("encode node payload: %w", err)
+	}
+	cidStr, _ := cid.Encode()
+	ps.Store(ctx, cidStr, buf.Bytes())
+
+	return nil
+}
+
+func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) (*ProviderRecord, error) {
+	cidStr, _ := cid.Encode()
+	b, err := ps.Get(ctx, cidStr)
+	if err != nil {
+		return nil, fmt.Errorf("unknown cid: %w", err)
+	}
+
+	var mp ProviderRecord
+	dec := util.Must(cbor.DecOptions{TimeTag: cbor.DecTagIgnored}.DecMode())
+	if err := dec.Unmarshal(b, &mp); err != nil {
+		return nil, fmt.Errorf("provider record decode: %w", err)
+	}
+
+	return &mp, nil
+}

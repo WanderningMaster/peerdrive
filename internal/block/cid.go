@@ -4,7 +4,6 @@ import (
 	"fmt"
 
 	mbase "github.com/multiformats/go-multibase"
-	// Uncomment if you want BLAKE3 support:
 	"lukechampine.com/blake3"
 )
 
@@ -38,17 +37,28 @@ func DecodeCID(s string) (CID, error) {
 	return c, nil
 }
 
-func computeDigest(data []byte) ([32]byte, error) {
-	return blake3.Sum256(data), nil
-}
-
 func NewCID(bytes []byte) (CID, error) {
-	sum, err := computeDigest(bytes)
-	if err != nil {
-		return CID{}, err
-	}
+	sum := blake3.Sum256(bytes)
 	return CID{
 		Version: CIDVersionField(CIDVersion),
 		Digest:  sum,
 	}, nil
+}
+
+func (c *CID) ToBytes() []byte {
+	buf := make([]byte, 34)
+	buf[0] = byte(c.Version)
+	// buf[1] reserved
+	copy(buf[2:], c.Digest[:])
+	return buf
+}
+
+func CidFromBytes(b []byte) (CID, error) {
+	if len(b) != 34 {
+		return CID{}, fmt.Errorf("bad CID length in CBOR: %d", len(b))
+	}
+	var c CID
+	c.Version = CIDVersionField(b[0])
+	copy(c.Digest[:], b[2:])
+	return c, nil
 }

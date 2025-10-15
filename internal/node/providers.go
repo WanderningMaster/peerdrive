@@ -51,3 +51,13 @@ func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) (*Provider
 
 	return &mp, nil
 }
+
+// DeleteProviderRecord removes the local provider record for the given CID.
+// Remote replicas stored via DHT will naturally expire based on TTL.
+func (ps *Node) DeleteProviderRecord(ctx context.Context, cid block.CID) error {
+    cidStr, _ := cid.Encode()
+    ps.storeMu.Lock()
+    delete(ps.store, cidStr)
+    ps.storeMu.Unlock()
+    return nil
+}

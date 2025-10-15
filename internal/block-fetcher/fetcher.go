@@ -28,3 +28,7 @@ func (f *Fetcher) FetchBlock(ctx context.Context, cid block.CID) ([]byte, error)
 func (f *Fetcher) Announce(ctx context.Context, cid block.CID) error {
 	return f.node.PutProviderRecord(ctx, cid)
 }
+
+func (f *Fetcher) Unannounce(ctx context.Context, cid block.CID) error {
+	return f.node.DeleteProviderRecord(ctx, cid)
+}

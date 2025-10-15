@@ -8,27 +8,11 @@ import (
 	"log"
 	"time"
 
-	"github.com/WanderningMaster/peerdrive/internal/block"
+	blockfetcher "github.com/WanderningMaster/peerdrive/internal/block-fetcher"
 	"github.com/WanderningMaster/peerdrive/internal/dag"
 	"github.com/WanderningMaster/peerdrive/internal/node"
 	"github.com/WanderningMaster/peerdrive/internal/storage"
 )
-
-type Fetcher struct {
-	node *node.Node
-}
-
-func (f *Fetcher) FetchBlock(ctx context.Context, cid block.CID) ([]byte, error) {
-	pr, err := f.node.GetProviderRecord(ctx, cid)
-	if err != nil {
-		return nil, err
-	}
-	return f.node.FetchBlock(ctx, string(pr.Addr), cid)
-}
-
-func (f *Fetcher) Announce(ctx context.Context, cid block.CID) error {
-	return f.node.PutProviderRecord(ctx, cid)
-}
 
 func startNode(ctx context.Context, addr string) *node.Node {
 	n := node.NewNode(addr)
@@ -59,9 +43,9 @@ func main() {
 	n2.Bootstrap(ctx, []string{addr1})
 	n3.Bootstrap(ctx, []string{addr2})
 
-	f1 := &Fetcher{node: n1}
-	f2 := &Fetcher{node: n2}
-	f3 := &Fetcher{node: n3}
+	f1 := blockfetcher.New(n1)
+	f2 := blockfetcher.New(n2)
+	f3 := blockfetcher.New(n3)
 	mem1 := storage.NewMemStore(storage.WithFetcher(f1))
 	mem2 := storage.NewMemStore(storage.WithFetcher(f2))
 	mem3 := storage.NewMemStore(storage.WithFetcher(f3))
@@ -85,8 +69,38 @@ func main() {
 
 	time.Sleep(200 * time.Millisecond)
 
+	// Pin the manifest so GC preserves the full DAG, then run GC.
+	if err := mem1.Pin(ctx, cid); err != nil {
+		log.Fatalf("pin: %v", err)
+	}
+	freed, err := mem1.GC(ctx)
+	if err != nil {
+		log.Fatalf("gc (pinned): %v", err)
+	}
+	fmt.Printf("GC (pinned) freed: %d blocks\n", freed)
+
 	if err := dag.Verify(ctx, mem3, cid); err != nil {
 		log.Fatalf("verify failed: %v", err)
 	}
 	fmt.Println("Verify OK: node3 retrieved and verified all blocks")
+
+	// Demonstrate GC freeing data after unpinning the manifest.
+	if err := mem1.Unpin(ctx, cid); err != nil {
+		log.Fatalf("unpin: %v", err)
+	}
+	freed, err = mem1.GC(ctx)
+	if err != nil {
+		log.Fatalf("gc (after unpin): %v", err)
+	}
+	fmt.Printf("GC (after unpin) freed: %d blocks\n", freed)
+
+	time.Sleep(time.Second * 1)
+
+	if err := dag.Verify(ctx, mem3, cid); err == nil {
+		fmt.Println("Verify OK(after unpin+GC): node3 retrieved and verified all blocks")
+	}
+	if err := dag.Verify(ctx, mem2, cid); err != nil {
+		fmt.Println("Verify Failed (after unpin+GC): node2")
+		fmt.Println("node2 never fetched so block not cached")
+	}
 }

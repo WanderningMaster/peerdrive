@@ -1,17 +1,16 @@
 package dag
 
 import (
-	"bytes"
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"sync/atomic"
+    "bytes"
+    "context"
+    "errors"
+    "fmt"
+    "io"
+    "sync/atomic"
 
-	"github.com/WanderningMaster/peerdrive/internal/block"
-	"github.com/WanderningMaster/peerdrive/internal/storage"
-	"github.com/WanderningMaster/peerdrive/internal/util"
-	"github.com/fxamacker/cbor/v2"
+    "github.com/WanderningMaster/peerdrive/internal/block"
+    "github.com/WanderningMaster/peerdrive/internal/util"
+    "github.com/fxamacker/cbor/v2"
 )
 
 type NodePayload struct {
@@ -35,14 +34,23 @@ type ManifestPayload struct {
 }
 
 type DagBuilder struct {
-	ChunkSize int
-	Fanout    int
-	Codec     string // "raw" for leaves, "cbor" for nodes/manifest
-	Store     storage.Store
+    ChunkSize int
+    Fanout    int
+    Codec     string // "raw" for leaves, "cbor" for nodes/manifest
+    Store     BlockPutGetter
 }
 
-func DefaultBuilder(store storage.Store) *DagBuilder {
-	return &DagBuilder{ChunkSize: 1 << 20, Fanout: 256, Codec: "cbor", Store: store}
+type BlockGetter interface {
+    GetBlock(ctx context.Context, c block.CID) (*block.Block, error)
+}
+
+type BlockPutGetter interface {
+    PutBlock(ctx context.Context, b *block.Block) error
+    GetBlock(ctx context.Context, c block.CID) (*block.Block, error)
+}
+
+func DefaultBuilder(store BlockPutGetter) *DagBuilder {
+    return &DagBuilder{ChunkSize: 1 << 20, Fanout: 256, Codec: "cbor", Store: store}
 }
 
 // BuildFromReader ingests r, builds the Merkle DAG, stores all blocks, and
@@ -159,7 +167,7 @@ func (b *DagBuilder) BuildFromReader(ctx context.Context, name string, r io.Read
 	return mblk, mblk.CID, nil
 }
 
-func Verify(ctx context.Context, s storage.Store, manifestCID block.CID) error {
+func Verify(ctx context.Context, s BlockGetter, manifestCID block.CID) error {
 	mblk, err := s.GetBlock(ctx, manifestCID)
 	if err != nil {
 		return err
@@ -184,7 +192,7 @@ func Verify(ctx context.Context, s storage.Store, manifestCID block.CID) error {
 	return nil
 }
 
-func verifySubtree(ctx context.Context, s storage.Store, c block.CID, expectSpan uint64, visited *uint64, dec cbor.DecMode) error {
+func verifySubtree(ctx context.Context, s BlockGetter, c block.CID, expectSpan uint64, visited *uint64, dec cbor.DecMode) error {
 	b, err := s.GetBlock(ctx, c)
 	if err != nil {
 		return err
@@ -228,7 +236,7 @@ func verifySubtree(ctx context.Context, s storage.Store, c block.CID, expectSpan
 	}
 }
 
-func Fetch(ctx context.Context, s storage.Store, manifestCID block.CID) ([]byte, error) {
+func Fetch(ctx context.Context, s BlockGetter, manifestCID block.CID) ([]byte, error) {
 	mblk, err := s.GetBlock(ctx, manifestCID)
 	if err != nil {
 		return nil, err
@@ -255,13 +263,13 @@ func Fetch(ctx context.Context, s storage.Store, manifestCID block.CID) ([]byte,
 }
 
 func fetchRangeSeq(
-	ctx context.Context,
-	s storage.Store,
-	cid block.CID,
-	base uint64,
-	span uint64,
-	out []byte,
-	dec cbor.DecMode,
+    ctx context.Context,
+    s BlockGetter,
+    cid block.CID,
+    base uint64,
+    span uint64,
+    out []byte,
+    dec cbor.DecMode,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -316,7 +324,7 @@ func fetchRangeSeq(
 
 // Fetch reconstructs the full file into a byte slice, using up to parallel
 // active fetches. It validates every block against its CID.
-func FetchParallel(ctx context.Context, s storage.Store, manifestCID block.CID, parallel int) ([]byte, error) {
+func FetchParallel(ctx context.Context, s BlockGetter, manifestCID block.CID, parallel int) ([]byte, error) {
 	if parallel <= 0 {
 		parallel = 16
 	}
@@ -358,7 +366,7 @@ func FetchParallel(ctx context.Context, s storage.Store, manifestCID block.CID, 
 	}
 }
 
-func fetchRange(ctx context.Context, s storage.Store, cid block.CID, base uint64, span uint64, out []byte, sem chan struct{}, dec cbor.DecMode) error {
+func fetchRange(ctx context.Context, s BlockGetter, cid block.CID, base uint64, span uint64, out []byte, sem chan struct{}, dec cbor.DecMode) error {
 	select {
 	case sem <- struct{}{}:
 	case <-ctx.Done():
@@ -417,5 +425,46 @@ func fetchRange(ctx context.Context, s storage.Store, cid block.CID, base uint64
 		return nil
 	default:
 		return fmt.Errorf("unexpected block type during fetch: %d", b.Header.Type)
+	}
+}
+
+func ChildCIDsFromBlock(b *block.Block) ([]block.CID, error) {
+	switch b.Header.Type {
+	case block.BlockData:
+		return nil, nil
+	case block.BlockNode:
+		dec, err := cbor.DecOptions{TimeTag: cbor.DecTagIgnored}.DecMode()
+		if err != nil {
+			return nil, err
+		}
+    var np NodePayload
+		if err := dec.Unmarshal(b.Payload, &np); err != nil {
+			return nil, err
+		}
+		out := make([]block.CID, 0, len(np.CIDs))
+		for _, raw := range np.CIDs {
+			c, err := block.CidFromBytes(raw)
+			if err != nil {
+				return nil, err
+			}
+			out = append(out, c)
+		}
+		return out, nil
+	case block.BlockManifest:
+		dec, err := cbor.DecOptions{TimeTag: cbor.DecTagIgnored}.DecMode()
+		if err != nil {
+			return nil, err
+		}
+    var mp ManifestPayload
+		if err := dec.Unmarshal(b.Payload, &mp); err != nil {
+			return nil, err
+		}
+		c, err := block.CidFromBytes(mp.Root)
+		if err != nil {
+			return nil, err
+		}
+		return []block.CID{c}, nil
+	default:
+		return nil, errors.New("unknown block type")
 	}
 }

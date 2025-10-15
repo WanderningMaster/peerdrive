@@ -8,8 +8,8 @@ import (
 )
 
 type RoutingTable struct {
-	self    nodeId.NodeID
-	buckets []*Bucket
+    self    nodeId.NodeID
+    buckets []*Bucket
 }
 
 func NewRoutingTable(self nodeId.NodeID) *RoutingTable {
@@ -77,4 +77,20 @@ func (rt *RoutingTable) Closest(target nodeId.NodeID, max int) []Contact {
 		all = all[:max]
 	}
 	return all
+}
+
+// Remove removes the given contact from its bucket (by ID). Returns true if removed.
+func (rt *RoutingTable) Remove(c Contact) bool {
+    idx := rt.BucketIndex(c.ID)
+    return rt.buckets[idx].RemoveByID(c.ID)
+}
+
+// RemoveByAddr removes any contacts matching the address across all buckets.
+// Returns the count of removed contacts.
+func (rt *RoutingTable) RemoveByAddr(addr string) int {
+    removed := 0
+    for _, b := range rt.buckets {
+        removed += b.RemoveByAddr(addr)
+    }
+    return removed
 }

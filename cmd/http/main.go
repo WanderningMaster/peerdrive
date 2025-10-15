@@ -54,10 +54,12 @@ func startHTTP(n *node.Node, httpPort int) {
 			http.Error(w, "key required", 400)
 			return
 		}
-		vals := n.GetAll(r.Context(), key)
-		for _, val := range vals {
-			_, _ = io.WriteString(w, string(val)+"\n")
+		val, err := n.Get(r.Context(), key)
+		if err != nil {
+			http.Error(w, err.Error(), 500)
+			return
 		}
+		_, _ = io.WriteString(w, string(val)+"\n")
 	})
 
 	mux.HandleFunc("/dfs/{cid}", func(w http.ResponseWriter, r *http.Request) {
@@ -108,6 +110,28 @@ func startHTTP(n *node.Node, httpPort int) {
 
 		_, _ = io.WriteString(w, fmt.Sprintf("%s\n", cidStr))
 	})
+
+	mux.HandleFunc("/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		peersParam := r.URL.Query().Get("peers")
+		if peersParam == "" {
+			http.Error(w, "peers required", 400)
+			return
+		}
+		parts := strings.Split(peersParam, ",")
+		peers := make([]string, 0, len(parts))
+		for _, p := range parts {
+			p = strings.TrimSpace(p)
+			if p != "" {
+				peers = append(peers, p)
+			}
+		}
+		if len(peers) == 0 {
+			http.Error(w, "no valid peers provided", 400)
+			return
+		}
+		go n.Bootstrap(r.Context(), peers)
+		_, _ = io.WriteString(w, "ok\n")
+	})
 	go func() { _ = http.ListenAndServe(fmt.Sprintf(":%d", httpPort), mux) }()
 }
 
@@ -117,7 +141,6 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string) {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
 
-	// Start server
 	go func() {
 		if err := n.ListenAndServe(ctx); err != nil {
 			log.Fatal(err)
@@ -126,7 +149,6 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string) {
 
 	startHTTP(n, conf.HttpPort)
 
-	// Bootstrap if provided
 	if *boot != "" {
 		peers := strings.Split(*boot, ",")
 		for i := range peers {
@@ -134,10 +156,9 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string) {
 		}
 		n.Bootstrap(ctx, peers)
 	}
+	n.StartMaintenance(ctx)
 
-	ok, err := daemon.SdNotify(false, daemon.SdNotifyReady)
-	fmt.Println(ok, err)
+	_, _ = daemon.SdNotify(false, daemon.SdNotifyReady)
 
-	// Keep alive
 	select {}
 }

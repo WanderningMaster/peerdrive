@@ -2,8 +2,6 @@ build:
 	go build -o bin/peerdrive cmd/cli/main.go
 build-localnet:
 	go build -o bin/localnet cmd/localnet/main.go
-build-bench:
-	go build -o bin/bench cmd/bench/main.go
 build-dfs-demo:
 	go build -o bin/dfs-demo cmd/dfs-demo/main.go
 test:

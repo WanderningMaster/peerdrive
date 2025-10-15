@@ -12,7 +12,6 @@ import (
 	"sync"
 	"time"
 
-	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/id"
 	"github.com/WanderningMaster/peerdrive/internal/routing"
@@ -20,17 +19,15 @@ import (
 )
 
 func (n *Node) DialRpc(ctx context.Context, addr string, req rpc.RpcMessage) (rpc.RpcMessage, error) {
-	defaults := configuration.Default()
-
 	var zero rpc.RpcMessage
-	ctx, cancel := context.WithTimeout(ctx, defaults.RpcTimeout)
+	ctx, cancel := context.WithTimeout(ctx, n.conf.RpcTimeout)
 	defer cancel()
-	conn, err := net.DialTimeout("tcp", addr, defaults.RpcTimeout)
+	conn, err := net.DialTimeout("tcp", addr, n.conf.RpcTimeout)
 	if err != nil {
 		return zero, err
 	}
 	defer conn.Close()
-	conn.SetDeadline(time.Now().Add(defaults.RpcTimeout))
+	conn.SetDeadline(time.Now().Add(n.conf.RpcTimeout))
 	enc := json.NewEncoder(conn)
 	dec := json.NewDecoder(bufio.NewReader(conn))
 	if err := enc.Encode(req); err != nil {
@@ -43,16 +40,14 @@ func (n *Node) DialRpc(ctx context.Context, addr string, req rpc.RpcMessage) (rp
 }
 
 func (n *Node) Ping(ctx context.Context, addr string) error {
-	_, err := n.DialRpc(ctx, addr, rpc.RpcMessage{Type: rpc.Ping, From: n.Contact()})
+	m, err := n.DialRpc(ctx, addr, rpc.RpcMessage{Type: rpc.Ping, From: n.Contact()})
 	if err == nil {
-		// add to RT as live contact (synthetic ID unknown; ask peer for ID via response.From)
-		// We sent our From, peer's response includes their From;
-		// the DialRpc already decoded it into msg.From
+		n.rt.Update(m.From)
+		n.onRpcSuccess(m.From)
 	}
 	return err
 }
 
-// Bootstrap: try to Ping known peers to seed the routing table.
 func (n *Node) Bootstrap(ctx context.Context, peers []string) {
 	for _, p := range peers {
 		m, err := n.DialRpc(ctx, p, rpc.RpcMessage{Type: rpc.Ping, From: n.Contact()})
@@ -63,46 +58,46 @@ func (n *Node) Bootstrap(ctx context.Context, peers []string) {
 	}
 }
 
-// Store replicates a key/value to the replicas closest to key.
 func (n *Node) Store(ctx context.Context, key string, value []byte) error {
-	defaults := configuration.Default()
-
 	// Put locally first
 	n.storeMu.Lock()
-	n.store[key] = append([]byte(nil), value...)
+	n.store[key] = kvRecord{Value: append([]byte(nil), value...), Expires: time.Now().Add(n.conf.RecordTTL), Origin: true}
 	n.storeMu.Unlock()
 
 	// Find k closest peers
-	peers := n.IterativeFindNode(ctx, id.HashKey(key), defaults.KBucketK)
+	peers := n.IterativeFindNode(ctx, id.HashKey(key), n.conf.KBucketK)
+
 	// Send to up to "replicas" peers
-	for i := 0; i < len(peers) && i < defaults.Replicas; i++ {
+	for i := 0; i < len(peers) && i < n.conf.Replicas; i++ {
 		_, err := n.DialRpc(ctx, peers[i].Addr, rpc.RpcMessage{Type: rpc.Store, From: n.Contact(), Key: key, Value: value})
 		if err != nil {
+			n.onRpcFailure(peers[i])
 			continue
 		}
+		n.onRpcSuccess(peers[i])
 	}
 	return nil
 }
 
-// Get performs an iterative lookup; if value is found at any peer, returns it.
 func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
-	defaults := configuration.Default()
-
 	// Check local
 	n.storeMu.RLock()
-	if v, ok := n.store[key]; ok {
-		n.storeMu.RUnlock()
-		return append([]byte(nil), v...), nil
+	if rec, ok := n.store[key]; ok {
+		if time.Now().Before(rec.Expires) {
+			v := append([]byte(nil), rec.Value...)
+			n.storeMu.RUnlock()
+			return v, nil
+		}
 	}
 	n.storeMu.RUnlock()
 	// Ask peers
 	visited := make(map[string]bool)
 	target := id.HashKey(key)
-	cands := n.rt.Closest(target, defaults.Alpha)
+	cands := n.rt.Closest(target, n.conf.Alpha)
 	for len(cands) > 0 {
 		next := cands
-		if len(next) > defaults.Alpha {
-			next = next[:defaults.Alpha]
+		if len(next) > n.conf.Alpha {
+			next = next[:n.conf.Alpha]
 		}
 		var mu sync.Mutex
 		var found []byte
@@ -117,9 +112,11 @@ func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
 				defer wg.Done()
 				m, err := n.DialRpc(ctx, p.Addr, rpc.RpcMessage{Type: rpc.FindValue, From: n.Contact(), Key: key})
 				if err != nil {
+					n.onRpcFailure(p)
 					return
 				}
 				n.rt.Update(m.From)
+				n.onRpcSuccess(m.From)
 				if m.Found {
 					mu.Lock()
 					if found == nil {
@@ -135,93 +132,30 @@ func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
 		}
 		wg.Wait()
 		if found != nil {
+			n.storeMu.Lock()
+			n.store[key] = kvRecord{Value: append([]byte(nil), found...), Expires: time.Now().Add(n.conf.RecordTTL), Origin: false}
+			n.storeMu.Unlock()
 			return found, nil
 		}
-		// Deduplicate and sort cands by distance
 		cands = uniqAndSortByDist(cands, target, visited)
-		// Trim to kBucketK to bound growth
-		if len(cands) > defaults.KBucketK {
-			cands = cands[:defaults.KBucketK]
+		if len(cands) > n.conf.KBucketK {
+			cands = cands[:n.conf.KBucketK]
 		}
 	}
 	return nil, errors.New("not found")
 }
 
-func (n *Node) GetAll(ctx context.Context, key string) [][]byte {
-	defaults := configuration.Default()
-
-	founds := [][]byte{}
-	// Check local
-	n.storeMu.RLock()
-	if v, ok := n.store[key]; ok {
-		founds = append(founds, v)
-	}
-	n.storeMu.RUnlock()
-	// Ask peers
-	visited := make(map[string]bool)
-	target := id.HashKey(key)
-	cands := n.rt.Closest(target, defaults.Alpha)
-	for len(cands) > 0 {
-		next := cands
-		if len(next) > defaults.Alpha {
-			next = next[:defaults.Alpha]
-		}
-		var mu sync.Mutex
-		var found []byte
-		var wg sync.WaitGroup
-		for _, peer := range next {
-			if visited[peer.Addr] {
-				continue
-			}
-			visited[peer.Addr] = true
-			wg.Add(1)
-			go func(p routing.Contact) {
-				defer wg.Done()
-				m, err := n.DialRpc(ctx, p.Addr, rpc.RpcMessage{Type: rpc.FindValue, From: n.Contact(), Key: key})
-				if err != nil {
-					return
-				}
-				n.rt.Update(m.From)
-				if m.Found {
-					mu.Lock()
-					if found == nil {
-						found = append([]byte(nil), m.Value...)
-					}
-					mu.Unlock()
-					return
-				}
-				mu.Lock()
-				cands = append(cands, m.Nodes...)
-				mu.Unlock()
-			}(peer)
-		}
-		wg.Wait()
-		if found != nil {
-			founds = append(founds, found)
-		}
-		// Deduplicate and sort cands by distance
-		cands = uniqAndSortByDist(cands, target, visited)
-		// Trim to kBucketK to bound growth
-		if len(cands) > defaults.KBucketK {
-			cands = cands[:defaults.KBucketK]
-		}
-	}
-
-	return founds
-}
-
 func (n *Node) IterativeFindNode(ctx context.Context, target id.NodeID, want int) []routing.Contact {
-	defaults := configuration.Default()
 
 	visited := make(map[string]bool)
-	shortlist := n.rt.Closest(target, defaults.KBucketK)
+	shortlist := n.rt.Closest(target, n.conf.KBucketK)
 	shortlist = uniqAndSortByDist(shortlist, target, visited)
 
 	for {
 		progress := false
 		batch := shortlist
-		if len(batch) > defaults.Alpha {
-			batch = batch[:defaults.Alpha]
+		if len(batch) > n.conf.Alpha {
+			batch = batch[:n.conf.Alpha]
 		}
 		var mu sync.Mutex
 		var wg sync.WaitGroup
@@ -235,9 +169,11 @@ func (n *Node) IterativeFindNode(ctx context.Context, target id.NodeID, want int
 				defer wg.Done()
 				m, err := n.DialRpc(ctx, p.Addr, rpc.RpcMessage{Type: rpc.FindNode, From: n.Contact(), Key: target.String()})
 				if err != nil {
+					n.onRpcFailure(p)
 					return
 				}
 				n.rt.Update(m.From)
+				n.onRpcSuccess(m.From)
 				mu.Lock()
 				oldBest := bestDist(shortlist, target)
 				shortlist = append(shortlist, m.Nodes...)
@@ -280,10 +216,8 @@ func (n *Node) FetchBlock(ctx context.Context, addr string, cid block.CID) ([]by
 }
 
 func bestDist(cs []routing.Contact, target id.NodeID) *big.Int {
-	defaults := configuration.Default()
-
 	if len(cs) == 0 {
-		return big.NewInt(1).Lsh(big.NewInt(1), uint(defaults.IdBits))
+		return new(big.Int).Lsh(big.NewInt(1), 256)
 	}
 	best := id.XorDist(cs[0].ID, target)
 	for _, c := range cs[1:] {
@@ -311,7 +245,6 @@ func uniqAndSortByDist(cs []routing.Contact, target id.NodeID, visited map[strin
 	sort.Slice(out, func(i, j int) bool {
 		return id.XorDist(out[i].ID, target).Cmp(id.XorDist(out[j].ID, target)) < 0
 	})
-	// Remove already visited addresses from the front
 	i := 0
 	for i < len(out) && visited[out[i].Addr] {
 		i++

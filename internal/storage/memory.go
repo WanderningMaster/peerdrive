@@ -3,7 +3,9 @@ package storage
 import (
 	"context"
 	"errors"
+	"log"
 	"sync"
+	"time"
 
 	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/dag"
@@ -234,4 +236,27 @@ func (s *MemStore) GC(ctx context.Context) (int, error) {
 	s.mu.Unlock()
 
 	return freed, nil
+}
+
+func (s *MemStore) StartGC(ctx context.Context, interval time.Duration) {
+	if interval <= 0 {
+		return
+	}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				freed, err := s.GC(ctx)
+				if err != nil && err != context.Canceled {
+					log.Printf("memstore GC error: %v", err)
+				} else if freed > 0 {
+					log.Printf("memstore GC freed %d blocks", freed)
+				}
+			}
+		}
+	}()
 }

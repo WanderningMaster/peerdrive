@@ -76,7 +76,7 @@ func (n *Node) StartMaintenance(ctx context.Context) {
 	go n.gcLoop(ctx)
 	go n.republishLoop(ctx)
 	go n.refreshLoop(ctx)
-	// go n.revalidateLoop(ctx)
+	go n.revalidateLoop(ctx)
 }
 
 func (n *Node) WithConfig(conf configuration.Config) *Node {
@@ -130,7 +130,9 @@ func (n *Node) republishLoop(ctx context.Context) {
 			}
 			n.storeMu.RUnlock()
 			for _, it := range items {
-				if it.origin && now.Add(n.conf.RepublishInterval).After(it.expires) {
+				// Republish when the remaining TTL is less than or equal to the republish interval
+				remaining := it.expires.Sub(now)
+				if it.origin && remaining <= n.conf.RepublishInterval {
 					_ = n.Store(ctx, it.key, it.val)
 				}
 			}

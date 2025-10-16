@@ -2,7 +2,6 @@ package node
 
 import (
 	"context"
-	"log"
 	"net"
 	"sync"
 	"sync/atomic"
@@ -93,7 +92,6 @@ func (n *Node) gcLoop(ctx context.Context) {
 			return
 		case <-t.C:
 			now := time.Now()
-			log.Println("Running GC")
 			n.storeMu.Lock()
 			for k, rec := range n.store {
 				if now.After(rec.Expires) {
@@ -113,7 +111,6 @@ func (n *Node) republishLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			log.Println("Running republish")
 			now := time.Now()
 			n.storeMu.RLock()
 			type item struct {
@@ -148,7 +145,6 @@ func (n *Node) refreshLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			log.Println("Running refresh")
 			target := id.RandomID()
 			_ = n.IterativeFindNode(ctx, target, n.conf.KBucketK)
 		}
@@ -163,7 +159,6 @@ func (n *Node) revalidateLoop(ctx context.Context) {
 		case <-ctx.Done():
 			return
 		case <-t.C:
-			log.Println("Running refresh")
 			target := id.RandomID()
 			sample := n.rt.Closest(target, n.conf.Alpha)
 			for _, c := range sample {

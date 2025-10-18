@@ -13,20 +13,22 @@ type Bucket struct {
 }
 
 func (b *Bucket) Touch(c Contact) (evicted *Contact) {
-	defaults := configuration.Default()
+    defaults := configuration.Default()
 
-	b.mu.Lock()
-	defer b.mu.Unlock()
+    b.mu.Lock()
+    defer b.mu.Unlock()
 
-	// move to end if exists
-	for i := range b.list {
-		if b.list[i].ID == c.ID {
-			v := b.list[i]
-			b.list = append(append([]Contact{}, b.list[:i]...), b.list[i+1:]...)
-			b.list = append(b.list, v)
-			return nil
-		}
-	}
+    // move to end if exists
+    for i := range b.list {
+        if b.list[i].ID == c.ID {
+            v := b.list[i]
+            v.Addr = c.Addr
+            v.Relay = c.Relay
+            b.list = append(append([]Contact{}, b.list[:i]...), b.list[i+1:]...)
+            b.list = append(b.list, v)
+            return nil
+        }
+    }
 	if len(b.list) < defaults.KBucketK {
 		b.list = append(b.list, c)
 		return nil

@@ -23,7 +23,7 @@ func (ps *Node) PutProviderRecord(ctx context.Context, cid block.CID) error {
 		V:      0,
 		CID:    cid.ToBytes(),
 		PeerID: ps.ID[:],
-		Addr:   []byte(ps.Addr),
+		Addr:   []byte(ps.advertisedAddr()),
 	}
 	if ps.relayAddr != "" {
 		rec.Relay = []byte(ps.relayAddr)

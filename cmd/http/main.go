@@ -5,8 +5,10 @@ import (
 	"fmt"
 	"io"
 	"log"
+	"net"
 	"net/http"
 	"os"
+	"strconv"
 	"strings"
 	"time"
 
@@ -16,6 +18,7 @@ import (
 	"github.com/WanderningMaster/peerdrive/internal/dag"
 	"github.com/WanderningMaster/peerdrive/internal/node"
 	"github.com/WanderningMaster/peerdrive/internal/storage"
+	"github.com/WanderningMaster/peerdrive/internal/util"
 	daemon "github.com/coreos/go-systemd/v22/daemon"
 )
 
@@ -36,13 +39,15 @@ func startHTTP(n *node.Node, httpPort int) {
 		_, _ = io.WriteString(w, fmt.Sprintf("%s\n", n.ID.String()))
 	})
 	mux.HandleFunc("/put", func(w http.ResponseWriter, r *http.Request) {
+		ctx := util.WithLogPrefix(r.Context(), "client")
+
 		key := r.URL.Query().Get("key")
 		val := r.URL.Query().Get("value")
 		if key == "" {
 			http.Error(w, "key required", 400)
 			return
 		}
-		err := n.Store(r.Context(), key, []byte(val))
+		err := n.Store(ctx, key, []byte(val))
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -50,12 +55,14 @@ func startHTTP(n *node.Node, httpPort int) {
 		_, _ = io.WriteString(w, "ok\n")
 	})
 	mux.HandleFunc("/get", func(w http.ResponseWriter, r *http.Request) {
+		ctx := util.WithLogPrefix(r.Context(), "client")
+
 		key := r.URL.Query().Get("key")
 		if key == "" {
 			http.Error(w, "key required", 400)
 			return
 		}
-		val, err := n.Get(r.Context(), key)
+		val, err := n.Get(ctx, key)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -64,6 +71,8 @@ func startHTTP(n *node.Node, httpPort int) {
 	})
 
 	mux.HandleFunc("/dfs/{cid}", func(w http.ResponseWriter, r *http.Request) {
+		ctx := util.WithLogPrefix(r.Context(), "client")
+
 		cidStr := r.PathValue("cid")
 		outPath := r.URL.Query().Get("out")
 		if outPath == "" {
@@ -77,7 +86,7 @@ func startHTTP(n *node.Node, httpPort int) {
 			return
 		}
 
-		b, err := dag.Fetch(context.TODO(), blockstore, cid)
+		b, err := dag.Fetch(ctx, blockstore, cid)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -90,6 +99,8 @@ func startHTTP(n *node.Node, httpPort int) {
 		_, _ = io.WriteString(w, "ok\n")
 	})
 	mux.HandleFunc("/dfs/put", func(w http.ResponseWriter, r *http.Request) {
+		ctx := util.WithLogPrefix(r.Context(), "client")
+
 		inPath := r.URL.Query().Get("in")
 		if inPath == "" {
 			http.Error(w, "in required", 400)
@@ -101,7 +112,7 @@ func startHTTP(n *node.Node, httpPort int) {
 			http.Error(w, err.Error(), 500)
 			return
 		}
-		_, cid, err := builder.BuildFromReader(context.TODO(), "example.txt", inFile)
+		_, cid, err := builder.BuildFromReader(ctx, "example.txt", inFile)
 		if err != nil {
 			http.Error(w, err.Error(), 500)
 			return
@@ -113,6 +124,8 @@ func startHTTP(n *node.Node, httpPort int) {
 	})
 
 	mux.HandleFunc("/bootstrap", func(w http.ResponseWriter, r *http.Request) {
+		ctx := util.WithLogPrefix(r.Context(), "client")
+
 		peersParam := r.URL.Query().Get("peers")
 		if peersParam == "" {
 			http.Error(w, "peers required", 400)
@@ -130,7 +143,7 @@ func startHTTP(n *node.Node, httpPort int) {
 			http.Error(w, "no valid peers provided", 400)
 			return
 		}
-		go n.Bootstrap(r.Context(), peers)
+		go n.Bootstrap(ctx, peers)
 		_, _ = io.WriteString(w, "ok\n")
 	})
 	go func() { _ = http.ListenAndServe(fmt.Sprintf(":%d", httpPort), mux) }()
@@ -143,13 +156,14 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string, relayAddr
 	defer cancel()
 
 	go func() {
-		if err := n.ListenAndServe(ctx); err != nil {
+		ctxServer := util.WithLogPrefix(ctx, "server")
+		if err := n.ListenAndServe(ctxServer); err != nil {
 			log.Fatal(err)
 		}
 	}()
 
 	m, _ := n.WhoAmI(ctx, "3.127.69.180:20018")
-	n.SetAdvertisedAddr(string(m.Value))
+	n.SetAdvertisedAddr(net.JoinHostPort(string(m.Value), strconv.Itoa(conf.TcpPort)))
 	startHTTP(n, conf.HttpPort)
 
 	// Attach to relay if provided by flag or config
@@ -163,7 +177,8 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string, relayAddr
 
 	if raddr != "" {
 		go func() {
-			if err := n.AttachRelay(ctx, raddr); err != nil {
+			ctxRelay := util.WithLogPrefix(ctx, "relay")
+			if err := n.AttachRelay(ctxRelay, raddr); err != nil {
 				log.Printf("failed to attach relay: %v", err)
 			}
 		}()
@@ -175,7 +190,8 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string, relayAddr
 		for i := range peers {
 			peers[i] = strings.TrimSpace(peers[i])
 		}
-		n.Bootstrap(ctx, peers)
+		ctxClient := util.WithLogPrefix(ctx, "client")
+		n.Bootstrap(ctxClient, peers)
 	}
 	n.StartMaintenance(ctx)
 

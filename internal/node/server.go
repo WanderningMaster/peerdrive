@@ -50,11 +50,11 @@ func (n *Node) handleConn(c net.Conn) {
 	}
 	// Sanitize claimed sender address: keep claimed port, replace host with remote IP
 	// to avoid poisoning while preserving listen port. If parsing fails, keep the claimed address.
-	// if remoteHost, _, err := net.SplitHostPort(c.RemoteAddr().String()); err == nil {
-	// 	if _, port, err2 := net.SplitHostPort(m.From.Addr); err2 == nil && port != "" {
-	// 		m.From.Addr = net.JoinHostPort(remoteHost, port)
-	// 	}
-	// }
+	if remoteHost, _, err := net.SplitHostPort(c.RemoteAddr().String()); err == nil {
+		if _, port, err2 := net.SplitHostPort(m.From.Addr); err2 == nil && port != "" {
+			m.From.Addr = net.JoinHostPort(remoteHost, port)
+		}
+	}
 	n.rt.Update(m.From)
 
 	switch m.Type {

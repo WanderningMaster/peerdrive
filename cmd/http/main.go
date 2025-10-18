@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"os"
 	"strings"
+	"time"
 
 	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/block"
@@ -135,7 +136,7 @@ func startHTTP(n *node.Node, httpPort int) {
 	go func() { _ = http.ListenAndServe(fmt.Sprintf(":%d", httpPort), mux) }()
 }
 
-func BootstrapHttpClient(conf *configuration.UserConfig, boot *string) {
+func BootstrapHttpClient(conf *configuration.UserConfig, boot *string, relayAddr *string) {
 	tcpAddr := fmt.Sprintf("0.0.0.0:%d", conf.TcpPort)
 	n := node.NewNodeWithId(tcpAddr, conf.NodeId)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -147,7 +148,27 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string) {
 		}
 	}()
 
+	m, _ := n.WhoAmI(ctx, "3.127.69.180:20018")
+	n.SetAdvertisedAddr(string(m.Value))
 	startHTTP(n, conf.HttpPort)
+
+	// Attach to relay if provided by flag or config
+	raddr := ""
+	if relayAddr != nil && *relayAddr != "" {
+		raddr = *relayAddr
+	}
+	if raddr == "" && conf.Relay != "" {
+		raddr = conf.Relay
+	}
+
+	if raddr != "" {
+		go func() {
+			if err := n.AttachRelay(ctx, raddr); err != nil {
+				log.Printf("failed to attach relay: %v", err)
+			}
+		}()
+	}
+	time.Sleep(time.Second * 3)
 
 	if *boot != "" {
 		peers := strings.Split(*boot, ",")

@@ -18,7 +18,14 @@ import (
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
 )
 
-func (n *Node) DialRpc(ctx context.Context, addr string, req rpc.RpcMessage) (rpc.RpcMessage, error) {
+func (n *Node) DialRpc(ctx context.Context, c routing.Contact, req rpc.RpcMessage) (rpc.RpcMessage, error) {
+	if c.Relay != "" {
+		return n.DialRpcViaRelay(ctx, c.Relay, c.ID.String(), req)
+	}
+	return n._dialRpc(ctx, c.Addr, req)
+}
+
+func (n *Node) _dialRpc(ctx context.Context, addr string, req rpc.RpcMessage) (rpc.RpcMessage, error) {
 	var zero rpc.RpcMessage
 	ctx, cancel := context.WithTimeout(ctx, n.conf.RpcTimeout)
 	defer cancel()
@@ -40,7 +47,7 @@ func (n *Node) DialRpc(ctx context.Context, addr string, req rpc.RpcMessage) (rp
 }
 
 func (n *Node) Ping(ctx context.Context, addr string) error {
-	m, err := n.DialRpc(ctx, addr, rpc.RpcMessage{Type: rpc.Ping, From: n.Contact()})
+	m, err := n.DialRpc(ctx, routing.Contact{Addr: addr}, rpc.RpcMessage{Type: rpc.Ping, From: n.Contact()})
 	if err == nil {
 		n.rt.Update(m.From)
 		n.onRpcSuccess(m.From)
@@ -50,7 +57,7 @@ func (n *Node) Ping(ctx context.Context, addr string) error {
 
 func (n *Node) Bootstrap(ctx context.Context, peers []string) {
 	for _, p := range peers {
-		m, err := n.DialRpc(ctx, p, rpc.RpcMessage{Type: rpc.Ping, From: n.Contact()})
+		m, err := n.DialRpc(ctx, routing.Contact{Addr: p}, rpc.RpcMessage{Type: rpc.Ping, From: n.Contact()})
 		if err != nil {
 			continue
 		}
@@ -69,7 +76,7 @@ func (n *Node) Store(ctx context.Context, key string, value []byte) error {
 
 	// Send to up to "replicas" peers
 	for i := 0; i < len(peers) && i < n.conf.Replicas; i++ {
-		_, err := n.DialRpc(ctx, peers[i].Addr, rpc.RpcMessage{Type: rpc.Store, From: n.Contact(), Key: key, Value: value})
+		_, err := n.DialRpc(ctx, peers[i], rpc.RpcMessage{Type: rpc.Store, From: n.Contact(), Key: key, Value: value})
 		if err != nil {
 			n.onRpcFailure(peers[i])
 			continue
@@ -94,6 +101,7 @@ func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
 	visited := make(map[string]bool)
 	target := id.HashKey(key)
 	cands := n.rt.Closest(target, n.conf.Alpha)
+	fmt.Println(cands)
 	for len(cands) > 0 {
 		next := cands
 		if len(next) > n.conf.Alpha {
@@ -110,7 +118,7 @@ func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
 			wg.Add(1)
 			go func(p routing.Contact) {
 				defer wg.Done()
-				m, err := n.DialRpc(ctx, p.Addr, rpc.RpcMessage{Type: rpc.FindValue, From: n.Contact(), Key: key})
+				m, err := n.DialRpc(ctx, p, rpc.RpcMessage{Type: rpc.FindValue, From: n.Contact(), Key: key})
 				if err != nil {
 					n.onRpcFailure(p)
 					return
@@ -167,7 +175,7 @@ func (n *Node) IterativeFindNode(ctx context.Context, target id.NodeID, want int
 			wg.Add(1)
 			go func(p routing.Contact) {
 				defer wg.Done()
-				m, err := n.DialRpc(ctx, p.Addr, rpc.RpcMessage{Type: rpc.FindNode, From: n.Contact(), Key: target.String()})
+				m, err := n.DialRpc(ctx, p, rpc.RpcMessage{Type: rpc.FindNode, From: n.Contact(), Key: target.String()})
 				if err != nil {
 					n.onRpcFailure(p)
 					return
@@ -199,12 +207,12 @@ func (n *Node) IterativeFindNode(ctx context.Context, target id.NodeID, want int
 	return shortlist
 }
 
-func (n *Node) FetchBlock(ctx context.Context, addr string, cid block.CID) ([]byte, error) {
+func (n *Node) FetchBlock(ctx context.Context, c routing.Contact, cid block.CID) ([]byte, error) {
 	key, err := cid.Encode()
 	if err != nil {
 		return nil, err
 	}
-	m, err := n.DialRpc(ctx, addr, rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Key: key})
+	m, err := n.DialRpc(ctx, c, rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Key: key})
 	if err != nil {
 		return nil, err
 	}

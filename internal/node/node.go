@@ -14,8 +14,9 @@ import (
 )
 
 type Node struct {
-	ID   id.NodeID
-	Addr string
+	ID             id.NodeID
+	Addr           string
+	AdvertisedAddr string
 
 	rt        *routing.RoutingTable
 	storeMu   sync.RWMutex
@@ -29,6 +30,11 @@ type Node struct {
 	FailCount map[string]int // key: id@addr
 
 	conf configuration.Config
+
+	needRelay bool
+
+	// relay attachment state
+	relayAddr string
 }
 
 // BlockProvider supplies local blocks to serve via RPC.
@@ -66,10 +72,21 @@ func NewNodeWithId(addr string, id id.NodeID) *Node {
 	}
 	return n
 }
-
-func (n *Node) Contact() routing.Contact { return routing.Contact{ID: n.ID, Addr: n.Addr} }
-
 func (n *Node) SetBlockProvider(p BlockProvider) { n.blockProv = p }
+func (n *Node) SetAdvertisedAddr(addr string)    { n.AdvertisedAddr = addr }
+
+func (n *Node) Contact() routing.Contact {
+	return routing.Contact{ID: n.ID, Addr: n.advertisedAddr(), Relay: n.relayAddr}
+}
+
+func (n *Node) advertisedAddr() string {
+	addr := n.Addr
+	if n.AdvertisedAddr != "" {
+		addr = n.AdvertisedAddr
+	}
+
+	return addr
+}
 
 func (n *Node) StartMaintenance(ctx context.Context) {
 	go n.gcLoop(ctx)

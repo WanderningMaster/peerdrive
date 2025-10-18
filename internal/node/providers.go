@@ -15,6 +15,7 @@ type ProviderRecord struct {
 	CID    []byte `cbor:"cid"`
 	PeerID []byte `cbor:"peer"`
 	Addr   []byte `cbor:"addrs"`
+	Relay  []byte `cbor:"relay,omitempty"`
 }
 
 func (ps *Node) PutProviderRecord(ctx context.Context, cid block.CID) error {
@@ -23,6 +24,9 @@ func (ps *Node) PutProviderRecord(ctx context.Context, cid block.CID) error {
 		CID:    cid.ToBytes(),
 		PeerID: ps.ID[:],
 		Addr:   []byte(ps.Addr),
+	}
+	if ps.relayAddr != "" {
+		rec.Relay = []byte(ps.relayAddr)
 	}
 
 	enc := util.Must(cbor.CanonicalEncOptions().EncMode())
@@ -55,9 +59,9 @@ func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) (*Provider
 // DeleteProviderRecord removes the local provider record for the given CID.
 // Remote replicas stored via DHT will naturally expire based on TTL.
 func (ps *Node) DeleteProviderRecord(ctx context.Context, cid block.CID) error {
-    cidStr, _ := cid.Encode()
-    ps.storeMu.Lock()
-    delete(ps.store, cidStr)
-    ps.storeMu.Unlock()
-    return nil
+	cidStr, _ := cid.Encode()
+	ps.storeMu.Lock()
+	delete(ps.store, cidStr)
+	ps.storeMu.Unlock()
+	return nil
 }

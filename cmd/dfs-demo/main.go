@@ -6,11 +6,13 @@ import (
 	"crypto/rand"
 	"fmt"
 	"log"
+	"net"
 	"time"
 
 	blockfetcher "github.com/WanderningMaster/peerdrive/internal/block-fetcher"
 	"github.com/WanderningMaster/peerdrive/internal/dag"
 	"github.com/WanderningMaster/peerdrive/internal/node"
+	"github.com/WanderningMaster/peerdrive/internal/relay"
 	"github.com/WanderningMaster/peerdrive/internal/storage"
 )
 
@@ -24,19 +26,51 @@ func startNode(ctx context.Context, addr string) *node.Node {
 	return n
 }
 
+func startRelay(ctx context.Context, addr string) *relay.Server {
+	n := relay.NewServer()
+	go func() {
+		if err := n.ListenAndServe(addr); err != nil {
+			log.Printf("relay stopped: %v", err)
+		}
+	}()
+
+	return n
+}
+
+func GetOutboundIP() net.IP {
+	conn, err := net.Dial("udp", "8.8.8.8:80")
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer conn.Close()
+
+	localAddr := conn.LocalAddr().(*net.UDPAddr)
+
+	return localAddr.IP
+}
+
 func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 	defer cancel()
+
+	raddr := "3.127.69.180:20018"
 
 	addr1 := "127.0.0.1:9011"
 	addr2 := "127.0.0.1:9012"
 	addr3 := "127.0.0.1:9013"
 
 	n1 := startNode(ctx, addr1)
+	go func() {
+		err := n1.AttachRelay(ctx, raddr)
+		if err != nil {
+			panic(err)
+		}
+	}()
+
 	n2 := startNode(ctx, addr2)
 	n3 := startNode(ctx, addr3)
 
-	time.Sleep(250 * time.Millisecond)
+	time.Sleep(750 * time.Millisecond)
 
 	// - Node n2 knows about Node n1
 	// - Node n3 knows only about Node n2

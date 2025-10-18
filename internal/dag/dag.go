@@ -1,16 +1,16 @@
 package dag
 
 import (
-    "bytes"
-    "context"
-    "errors"
-    "fmt"
-    "io"
-    "sync/atomic"
+	"bytes"
+	"context"
+	"errors"
+	"fmt"
+	"io"
+	"sync/atomic"
 
-    "github.com/WanderningMaster/peerdrive/internal/block"
-    "github.com/WanderningMaster/peerdrive/internal/util"
-    "github.com/fxamacker/cbor/v2"
+	"github.com/WanderningMaster/peerdrive/internal/block"
+	"github.com/WanderningMaster/peerdrive/internal/util"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type NodePayload struct {
@@ -34,23 +34,23 @@ type ManifestPayload struct {
 }
 
 type DagBuilder struct {
-    ChunkSize int
-    Fanout    int
-    Codec     string // "raw" for leaves, "cbor" for nodes/manifest
-    Store     BlockPutGetter
+	ChunkSize int
+	Fanout    int
+	Codec     string // "raw" for leaves, "cbor" for nodes/manifest
+	Store     BlockPutGetter
 }
 
 type BlockGetter interface {
-    GetBlock(ctx context.Context, c block.CID) (*block.Block, error)
+	GetBlock(ctx context.Context, c block.CID) (*block.Block, error)
 }
 
 type BlockPutGetter interface {
-    PutBlock(ctx context.Context, b *block.Block) error
-    GetBlock(ctx context.Context, c block.CID) (*block.Block, error)
+	PutBlock(ctx context.Context, b *block.Block) error
+	GetBlock(ctx context.Context, c block.CID) (*block.Block, error)
 }
 
 func DefaultBuilder(store BlockPutGetter) *DagBuilder {
-    return &DagBuilder{ChunkSize: 1 << 20, Fanout: 256, Codec: "cbor", Store: store}
+	return &DagBuilder{ChunkSize: 1 << 20, Fanout: 256, Codec: "cbor", Store: store}
 }
 
 // BuildFromReader ingests r, builds the Merkle DAG, stores all blocks, and
@@ -263,13 +263,13 @@ func Fetch(ctx context.Context, s BlockGetter, manifestCID block.CID) ([]byte, e
 }
 
 func fetchRangeSeq(
-    ctx context.Context,
-    s BlockGetter,
-    cid block.CID,
-    base uint64,
-    span uint64,
-    out []byte,
-    dec cbor.DecMode,
+	ctx context.Context,
+	s BlockGetter,
+	cid block.CID,
+	base uint64,
+	span uint64,
+	out []byte,
+	dec cbor.DecMode,
 ) error {
 	if err := ctx.Err(); err != nil {
 		return err
@@ -437,7 +437,7 @@ func ChildCIDsFromBlock(b *block.Block) ([]block.CID, error) {
 		if err != nil {
 			return nil, err
 		}
-    var np NodePayload
+		var np NodePayload
 		if err := dec.Unmarshal(b.Payload, &np); err != nil {
 			return nil, err
 		}
@@ -455,7 +455,7 @@ func ChildCIDsFromBlock(b *block.Block) ([]block.CID, error) {
 		if err != nil {
 			return nil, err
 		}
-    var mp ManifestPayload
+		var mp ManifestPayload
 		if err := dec.Unmarshal(b.Payload, &mp); err != nil {
 			return nil, err
 		}

@@ -16,6 +16,7 @@ type UserConfig struct {
 	NodeId   id.NodeID `json:"nodeId"`
 	TcpPort  int       `json:"tcpPort"`
 	HttpPort int       `json:"httpPort"`
+	Relay    string    `json:"relay,omitempty"`
 }
 
 func getRandomPort(minPort, maxPort int) (int, error) {
@@ -79,5 +80,6 @@ func defaultUserConfig() *UserConfig {
 		TcpPort:  tcpPort,
 		HttpPort: httpPort,
 		NodeId:   id.RandomID(),
+		// Relay:    "3.127.69.180:20018",
 	}
 }

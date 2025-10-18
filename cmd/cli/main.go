@@ -13,6 +13,7 @@ import (
 
 	cmd "github.com/WanderningMaster/peerdrive/cmd/http"
 	"github.com/WanderningMaster/peerdrive/configuration"
+	"github.com/WanderningMaster/peerdrive/internal/relay"
 )
 
 func main() {
@@ -24,6 +25,8 @@ func main() {
 	switch sub {
 	case "init":
 		serveHTTP(os.Args[2:])
+	case "relay":
+		serveRelay(os.Args[2:])
 	case "put":
 		putHTTP(os.Args[2:])
 	case "get":
@@ -44,6 +47,7 @@ func usage() {
 	fmt.Println(`peerdrive <command> [flags]
 Commands:
 init Run a node and start the built-in HTTP Client (/id, /put, /get, /dfs/{cid}, /dfs/put)
+relay Run an inbound relay server for attached nodes
 put Use to store key/value on a running node
 get Use to fetch value from a running node
 dfs-put Add file to DFS from path; prints resulting CID
@@ -55,12 +59,23 @@ Use -h after a command for flags.`)
 func serveHTTP(args []string) {
 	fs := flag.NewFlagSet("init", flag.ExitOnError)
 	boot := fs.String("bootstrap", "", "comma-separated peers to bootstrap (host:port)")
+	relayAddr := fs.String("relay", "", "relay server addr (host:port) to attach")
 	fs.Parse(args)
 
 	conf := configuration.LoadUserConfig()
+	cmd.BootstrapHttpClient(conf, boot, relayAddr)
 
-	cmd.BootstrapHttpClient(conf, boot)
+}
 
+func serveRelay(args []string) {
+	fs := flag.NewFlagSet("relay", flag.ExitOnError)
+	listen := fs.String("listen", ":35000", "address to listen for relay server (host:port)")
+	fs.Parse(args)
+
+	srv := relay.NewServer()
+	if err := srv.ListenAndServe(*listen); err != nil {
+		log.Fatal(err)
+	}
 }
 
 func putHTTP(args []string) {

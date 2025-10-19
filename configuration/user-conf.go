@@ -13,17 +13,18 @@ import (
 )
 
 type UserConfig struct {
-	NodeId   id.NodeID `json:"nodeId"`
-	TcpPort  int       `json:"tcpPort"`
-	HttpPort int       `json:"httpPort"`
-	Relay    string    `json:"relay,omitempty"`
+	NodeId         id.NodeID `json:"nodeId"`
+	TcpPort        int       `json:"tcpPort"`
+	HttpPort       int       `json:"httpPort"`
+	Relay          string    `json:"relay,omitempty"`
+	BlockstorePath string    `json:"blockstorePath"`
 }
 
 func getRandomPort(minPort, maxPort int) (int, error) {
 	rand.Seed(time.Now().UnixNano())
 	portRange := maxPort - minPort + 1
 
-	for i := 0; i < 30; i++ { // try up to 30 times
+	for range 30 { // try up to 30 times
 		port := rand.Intn(portRange) + minPort
 		ln, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 		if err == nil {
@@ -68,6 +69,14 @@ func LoadUserConfig() *UserConfig {
 	return &cfg
 }
 
+func EnsureBlockstore() string {
+	homedir, _ := os.UserHomeDir()
+	p := path.Join(homedir, ".peerdrive")
+	_ = os.MkdirAll(p, 0o755)
+
+	return p
+}
+
 func defaultUserConfig() *UserConfig {
 	tcpPort, err := getRandomPort(30000, 30100)
 	if err != nil {
@@ -77,9 +86,9 @@ func defaultUserConfig() *UserConfig {
 	httpPort := 8000 + tcpPort%1000
 
 	return &UserConfig{
-		TcpPort:  tcpPort,
-		HttpPort: httpPort,
-		NodeId:   id.RandomID(),
-		// Relay:    "3.127.69.180:20018",
+		TcpPort:        tcpPort,
+		HttpPort:       httpPort,
+		NodeId:         id.RandomID(),
+		BlockstorePath: EnsureBlockstore(),
 	}
 }

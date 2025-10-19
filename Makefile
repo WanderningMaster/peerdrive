@@ -10,6 +10,7 @@ daemonize:
 	make build
 	sudo cp ./bin/peerdrive /usr/local/bin/peerdrive
 	cp peerdrived.service $$HOME/.config/systemd/user/peerdrived.service
+	sudo chown $$(whoami) $$HOME/.config/systemd/user/peerdrived.service
 
 %:
 	@true

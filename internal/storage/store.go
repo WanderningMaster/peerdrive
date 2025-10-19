@@ -9,6 +9,7 @@ import (
 type Store interface {
 	PutBlock(ctx context.Context, b *block.Block) error
 	GetBlock(ctx context.Context, c block.CID) (*block.Block, error)
+	GetBlockLocal(ctx context.Context, c block.CID) (*block.Block, error)
 
 	Pin(ctx context.Context, c block.CID) error
 	Unpin(ctx context.Context, c block.CID) error

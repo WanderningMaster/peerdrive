@@ -14,9 +14,9 @@ import (
 
 	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/id"
+	"github.com/WanderningMaster/peerdrive/internal/logging"
 	"github.com/WanderningMaster/peerdrive/internal/routing"
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
-	"github.com/WanderningMaster/peerdrive/internal/util"
 )
 
 func (n *Node) DialRpc(ctx context.Context, c routing.Contact, req rpc.RpcMessage) (rpc.RpcMessage, error) {
@@ -27,6 +27,8 @@ func (n *Node) DialRpc(ctx context.Context, c routing.Contact, req rpc.RpcMessag
 }
 
 func (n *Node) _dialRpc(ctx context.Context, addr string, req rpc.RpcMessage) (rpc.RpcMessage, error) {
+	ctx = logging.WithPrefix(ctx, logging.ClientPrefix)
+
 	var zero rpc.RpcMessage
 	ctx, cancel := context.WithTimeout(ctx, n.conf.RpcTimeout)
 	defer cancel()
@@ -38,16 +40,16 @@ func (n *Node) _dialRpc(ctx context.Context, addr string, req rpc.RpcMessage) (r
 	conn.SetDeadline(time.Now().Add(n.conf.RpcTimeout))
 	enc := json.NewEncoder(conn)
 	dec := json.NewDecoder(bufio.NewReader(conn))
-	// Log outgoing request
-	util.Logf(ctx, "-> %s to %s key=%s size=%d", req.Type, addr, req.Key, len(req.Value))
+
+	logging.Logf(ctx, "-> %s to %s key=%s size=%d", req.Type, addr, req.Key, len(req.Value))
 	if err := enc.Encode(req); err != nil {
 		return zero, err
 	}
 	if err := dec.Decode(&zero); err != nil {
 		return zero, err
 	}
-	// Log incoming response
-	util.Logf(ctx, "<- %s from %s found=%v nodes=%d size=%d", zero.Type, zero.From.Addr, zero.Found, len(zero.Nodes), len(zero.Value))
+
+	logging.Logf(ctx, "<- %s from %s found=%v nodes=%d size=%d", zero.Type, zero.From.Addr, zero.Found, len(zero.Nodes), len(zero.Value))
 	return zero, nil
 }
 

@@ -10,6 +10,7 @@ import (
 	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/id"
+	"github.com/WanderningMaster/peerdrive/internal/logging"
 	"github.com/WanderningMaster/peerdrive/internal/routing"
 )
 
@@ -90,10 +91,12 @@ func (n *Node) advertisedAddr() string {
 
 // ClosestContacts returns up to k contacts closest to the given target ID.
 func (n *Node) ClosestContacts(target id.NodeID, k int) []routing.Contact {
-    return n.rt.Closest(target, k)
+	return n.rt.Closest(target, k)
 }
 
 func (n *Node) StartMaintenance(ctx context.Context) {
+	ctx = logging.WithPrefix(ctx, logging.ServerPrefix)
+
 	go n.gcLoop(ctx)
 	go n.republishLoop(ctx)
 	go n.refreshLoop(ctx)
@@ -101,8 +104,8 @@ func (n *Node) StartMaintenance(ctx context.Context) {
 }
 
 func (n *Node) WithConfig(conf configuration.Config) *Node {
-    n.conf = conf
-    return n
+	n.conf = conf
+	return n
 }
 
 // KBucketK returns the K parameter of the routing table.

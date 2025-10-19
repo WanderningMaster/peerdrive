@@ -11,11 +11,13 @@ import (
 
 	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/id"
+	"github.com/WanderningMaster/peerdrive/internal/logging"
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
-	"github.com/WanderningMaster/peerdrive/internal/util"
 )
 
 func (n *Node) ListenAndServe(ctx context.Context) error {
+	ctx = logging.WithPrefix(ctx, logging.ServerPrefix)
+
 	ln, err := net.Listen("tcp", n.Addr)
 	if err != nil {
 		return err
@@ -26,7 +28,7 @@ func (n *Node) ListenAndServe(ctx context.Context) error {
 		n.closing.Store(true)
 		_ = n.ln.Close()
 	}()
-	util.Logf(ctx, "node %s listening on %s", n.ID.String()[:8], n.Addr)
+	logging.Logf(ctx, "node %s listening on %s", n.ID.String()[:8], n.Addr)
 	for {
 		c, err := ln.Accept()
 		if err != nil {
@@ -45,7 +47,7 @@ func (n *Node) handleConn(ctx context.Context, c net.Conn) {
 	enc := json.NewEncoder(c)
 	var m rpc.RpcMessage
 	if err := dec.Decode(&m); err != nil {
-		util.Logf(ctx, "decode error from %s: %v", c.RemoteAddr().String(), err)
+		logging.Logf(ctx, "decode error from %s: %v", c.RemoteAddr().String(), err)
 		return
 	}
 	// Sanitize claimed sender address: keep claimed port, replace host with remote IP
@@ -57,12 +59,12 @@ func (n *Node) handleConn(ctx context.Context, c net.Conn) {
 	}
 	n.rt.Update(m.From)
 
-	util.Logf(ctx, "<- %s from %s@%s key=%s size=%d", m.Type, m.From.ID.String()[:8], m.From.Addr, m.Key, len(m.Value))
+	logging.Logf(ctx, "<- %s from %s@%s key=%s size=%d", m.Type, m.From.ID.String()[:8], m.From.Addr, m.Key, len(m.Value))
 
 	resp, _ := handleRequest(n, m)
 	_ = enc.Encode(resp)
 
-	util.Logf(ctx, "-> %s to %s", resp.Type, c.RemoteAddr().String())
+	logging.Logf(ctx, "-> %s to %s", resp.Type, c.RemoteAddr().String())
 }
 
 func handleRequest(n *Node, m rpc.RpcMessage) (rpc.RpcMessage, string) {

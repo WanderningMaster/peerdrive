@@ -9,9 +9,9 @@ import (
 	"net"
 	"time"
 
+	"github.com/WanderningMaster/peerdrive/internal/logging"
 	"github.com/WanderningMaster/peerdrive/internal/relay"
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
-	"github.com/WanderningMaster/peerdrive/internal/util"
 )
 
 // AttachRelay establishes a long-lived connection to an inbound relay server
@@ -29,7 +29,7 @@ func (n *Node) AttachRelay(ctx context.Context, relayAddr string) error {
 		_ = conn.Close()
 		return err
 	}
-	util.Logf(ctx, "node %s attached to relay %s", n.ID.String()[:8], relayAddr)
+	logging.Logf(ctx, "node %s attached to relay %s", n.ID.String()[:8], relayAddr)
 
 	go func() {
 		<-ctx.Done()
@@ -59,6 +59,8 @@ func (n *Node) AttachRelay(ctx context.Context, relayAddr string) error {
 
 // DialRpcViaRelay performs a single RPC to a target reachable via a relay server.
 func (n *Node) DialRpcViaRelay(ctx context.Context, relayAddr string, targetID string, req rpc.RpcMessage) (rpc.RpcMessage, error) {
+	ctx = logging.WithPrefix(ctx, logging.RelayClientPrefix)
+
 	var zero rpc.RpcMessage
 	conn, err := net.DialTimeout("tcp", relayAddr, n.conf.RpcTimeout)
 	if err != nil {

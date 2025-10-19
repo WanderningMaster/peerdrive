@@ -13,7 +13,9 @@ import (
 	blockfetcher "github.com/WanderningMaster/peerdrive/internal/block-fetcher"
 	"github.com/WanderningMaster/peerdrive/internal/dag"
 	"github.com/WanderningMaster/peerdrive/internal/id"
+	"github.com/WanderningMaster/peerdrive/internal/logging"
 	"github.com/WanderningMaster/peerdrive/internal/node"
+	"github.com/WanderningMaster/peerdrive/internal/routing"
 	"github.com/WanderningMaster/peerdrive/internal/storage"
 )
 
@@ -76,19 +78,15 @@ func (s *Service) Pin(ctx context.Context, cid block.CID) error      { return s.
 func (s *Service) Unpin(ctx context.Context, cid block.CID) error    { return s.store.Unpin(ctx, cid) }
 func (s *Service) ListPins(ctx context.Context) ([]block.CID, error) { return s.store.ListPins(ctx) }
 
-func (s *Service) Closest(target id.NodeID, k int) []any {
-	contacts := s.n.ClosestContacts(target, k)
-	out := make([]any, 0, len(contacts))
-	type outContact struct{ ID, Addr, Relay string }
-	for _, c := range contacts {
-		out = append(out, outContact{ID: c.ID.String(), Addr: c.Addr, Relay: c.Relay})
-	}
-	return out
+func (s *Service) Closest(target id.NodeID, k int) []routing.Contact {
+	return s.n.ClosestContacts(target, k)
 }
 
 func (s *Service) Bootstrap(ctx context.Context, peers []string) { s.n.Bootstrap(ctx, peers) }
 
 func (s *Service) StartNode(ctx context.Context) {
+	ctx = logging.WithPrefix(ctx, logging.ServerPrefix)
+
 	go func() {
 		if err := s.n.ListenAndServe(ctx); err != nil {
 			log.Printf("node server exited: %v", err)
@@ -97,6 +95,8 @@ func (s *Service) StartNode(ctx context.Context) {
 }
 
 func (s *Service) AttachRelay(ctx context.Context, addr string) <-chan error {
+	ctx = logging.WithPrefix(ctx, "relay_client")
+
 	ch := make(chan error, 1)
 	if addr == "" {
 		ch <- nil
@@ -150,6 +150,7 @@ func (s *Service) Start(ctx context.Context, relayAddr string, peers []string) {
 	if relayAddr == "" && s.conf.Relay != "" {
 		relayAddr = s.conf.Relay
 	}
+
 	attached := s.AttachRelay(ctx, relayAddr)
 	if len(peers) > 0 {
 		select {

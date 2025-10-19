@@ -2,12 +2,13 @@ package relay
 
 import (
 	"bufio"
+	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"net"
 	"sync"
 
+	"github.com/WanderningMaster/peerdrive/internal/logging"
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
 )
 
@@ -46,12 +47,15 @@ func NewServer() *Server {
 }
 
 func (s *Server) ListenAndServe(addr string) error {
+	ctx := logging.WithPrefix(context.Background(), "relay")
 	ln, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 	s.ln = ln
-	log.Printf("relay listening on %s", addr)
+
+	logging.Logf(ctx, "listening on %s", addr)
+
 	for {
 		c, err := ln.Accept()
 		if err != nil {
@@ -97,6 +101,8 @@ func (s *Server) handlWhoami(c net.Conn, dec *json.Decoder, enc *json.Encoder, f
 }
 
 func (s *Server) handleAttach(c net.Conn, dec *json.Decoder, enc *json.Encoder, first Frame) {
+	ctx := logging.WithPrefix(context.Background(), "relay")
+
 	if first.TargetID == "" {
 		_ = c.Close()
 		return
@@ -108,7 +114,7 @@ func (s *Server) handleAttach(c net.Conn, dec *json.Decoder, enc *json.Encoder, 
 	}
 	s.attached[first.TargetID] = a
 	s.muAttached.Unlock()
-	log.Printf("relay: attached node %s", first.TargetID[:8])
+	logging.Logf(ctx, "attached node %s", first.TargetID[:8])
 
 	defer func() {
 		s.muAttached.Lock()
@@ -117,7 +123,7 @@ func (s *Server) handleAttach(c net.Conn, dec *json.Decoder, enc *json.Encoder, 
 		}
 		s.muAttached.Unlock()
 		_ = c.Close()
-		log.Printf("relay: detached node %s", first.TargetID[:8])
+		logging.Logf(ctx, "relay: detached node %s", first.TargetID[:8])
 	}()
 
 	for {

@@ -15,8 +15,6 @@ const (
 	ClientResponse  FrameType = "CLIENT_RESPONSE"
 )
 
-// Frame is a simple JSON envelope used between clients, relay, and attached nodes.
-// It carries a correlation ID and an embedded RPC payload.
 type Frame struct {
 	Type     FrameType      `json:"type"`
 	ReqID    string         `json:"reqId,omitempty"`

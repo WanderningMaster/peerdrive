@@ -34,7 +34,6 @@ type Node struct {
 
 	needRelay bool
 
-	// relay attachment state
 	relayAddr string
 }
 
@@ -89,7 +88,6 @@ func (n *Node) advertisedAddr() string {
 	return addr
 }
 
-// ClosestContacts returns up to k contacts closest to the given target ID.
 func (n *Node) ClosestContacts(target id.NodeID, k int) []routing.Contact {
 	return n.rt.Closest(target, k)
 }
@@ -108,7 +106,6 @@ func (n *Node) WithConfig(conf configuration.Config) *Node {
 	return n
 }
 
-// KBucketK returns the K parameter of the routing table.
 func (n *Node) KBucketK() int { return n.conf.KBucketK }
 
 func (n *Node) gcLoop(ctx context.Context) {

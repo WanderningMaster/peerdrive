@@ -14,7 +14,6 @@ import (
 	"github.com/WanderningMaster/peerdrive/internal/id"
 	"github.com/WanderningMaster/peerdrive/internal/node"
 	"github.com/WanderningMaster/peerdrive/internal/service"
-	daemon "github.com/coreos/go-systemd/v22/daemon"
 )
 
 func writeJSON(w http.ResponseWriter, v any) {
@@ -67,45 +66,45 @@ func NewMux(svc *service.Service) *http.ServeMux {
 		writeJSON(w, map[string]any{"found": true, "value": string(val)})
 	})
 
-    mux.HandleFunc("/dfs/{cid}", func(w http.ResponseWriter, r *http.Request) {
-        cidStr := r.PathValue("cid")
-        cid, err := block.DecodeCID(cidStr)
-        if err != nil {
-            writeErr(w, 400, err.Error())
-            return
-        }
-        b, err := svc.Fetch(r.Context(), cid)
-        if err != nil {
-            writeErr(w, 500, err.Error())
-            return
-        }
-        // Always return raw content for preview/download with appropriate headers
-        name, mime, err := svc.ManifestMeta(r.Context(), cid)
-        if err != nil {
-            // Not a manifest or decode error; continue with best-effort content type
-            name, mime = "", ""
-        }
+	mux.HandleFunc("/dfs/{cid}", func(w http.ResponseWriter, r *http.Request) {
+		cidStr := r.PathValue("cid")
+		cid, err := block.DecodeCID(cidStr)
+		if err != nil {
+			writeErr(w, 400, err.Error())
+			return
+		}
+		b, err := svc.Fetch(r.Context(), cid)
+		if err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		// Always return raw content for preview/download with appropriate headers
+		name, mime, err := svc.ManifestMeta(r.Context(), cid)
+		if err != nil {
+			// Not a manifest or decode error; continue with best-effort content type
+			name, mime = "", ""
+		}
 
-        if mime == "" {
-            if len(b) > 0 {
-                if len(b) > 512 {
-                    w.Header().Set("Content-Type", http.DetectContentType(b[:512]))
-                } else {
-                    w.Header().Set("Content-Type", http.DetectContentType(b))
-                }
-            } else {
-                w.Header().Set("Content-Type", "application/octet-stream")
-            }
-        } else {
-            w.Header().Set("Content-Type", mime)
-        }
-        if name != "" {
-            w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", name))
-            w.Header().Set("X-File-Name", name)
-        }
-        w.WriteHeader(http.StatusOK)
-        _, _ = w.Write(b)
-    })
+		if mime == "" {
+			if len(b) > 0 {
+				if len(b) > 512 {
+					w.Header().Set("Content-Type", http.DetectContentType(b[:512]))
+				} else {
+					w.Header().Set("Content-Type", http.DetectContentType(b))
+				}
+			} else {
+				w.Header().Set("Content-Type", "application/octet-stream")
+			}
+		} else {
+			w.Header().Set("Content-Type", mime)
+		}
+		if name != "" {
+			w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", name))
+			w.Header().Set("X-File-Name", name)
+		}
+		w.WriteHeader(http.StatusOK)
+		_, _ = w.Write(b)
+	})
 
 	mux.HandleFunc("/dfs/put", func(w http.ResponseWriter, r *http.Request) {
 		inPath := r.URL.Query().Get("in")
@@ -248,6 +247,5 @@ func BootstrapHttpClient(conf *configuration.UserConfig, boot *string, relayAddr
 	mux := NewMux(svc)
 	go func() { _ = http.ListenAndServe(fmt.Sprintf(":%d", conf.HttpPort), mux) }()
 
-	_, _ = daemon.SdNotify(false, daemon.SdNotifyReady)
 	select {}
 }

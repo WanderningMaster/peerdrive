@@ -22,12 +22,9 @@ type BlockHeader struct {
 	Type  BlockType `cbor:"type"`
 	Size  uint64    `cbor:"size"`
 	Codec string    `cbor:"codec,omitempty"` // "raw", "cbor", ...
-	// reserved / future fields:
-	_ struct{} `cbor:",toarray"` // fixed ordering; helps determinism across encoders
+	_     struct{}  `cbor:",toarray"`        // fixed ordering; helps determinism across encoders
 }
 
-// Block is the concatenation of the encoded header and the raw payload.
-// The CID is computed over header||payload.
 type Block struct {
 	CID     CID
 	Header  BlockHeader

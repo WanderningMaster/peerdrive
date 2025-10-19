@@ -131,6 +131,5 @@ func handleRequest(n *Node, m rpc.RpcMessage) (rpc.RpcMessage, string) {
 		}
 		return rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: true, Value: blk.Bytes}, "key=" + m.Key
 	}
-	// Default fallthrough
 	return rpc.RpcMessage{From: n.Contact()}, ""
 }

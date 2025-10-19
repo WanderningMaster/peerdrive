@@ -1,5 +1,5 @@
 build:
-	go build -o bin/peerdrive cmd/cli/main.go
+	go build -o bin/peerdrive cmd/cli/*
 build-localnet:
 	go build -o bin/localnet cmd/localnet/main.go
 build-dfs-demo:

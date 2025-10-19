@@ -53,8 +53,6 @@ func DefaultBuilder(store BlockPutGetter) *DagBuilder {
 	return &DagBuilder{ChunkSize: 1 << 20, Fanout: 256, Codec: "cbor", Store: store}
 }
 
-// BuildFromReader ingests r, builds the Merkle DAG, stores all blocks, and
-// returns the manifest block and its CID.
 func (b *DagBuilder) BuildFromReader(ctx context.Context, name string, mime string, r io.Reader) (*block.Block, block.CID, error) {
 	if b.ChunkSize <= 0 || b.Fanout <= 1 {
 		return nil, block.CID{}, errors.New("invalid builder params")
@@ -197,7 +195,6 @@ func verifySubtree(ctx context.Context, s BlockGetter, c block.CID, expectSpan u
 	if err != nil {
 		return err
 	}
-	// Integrity: recompute CID and compare against expected
 	if b.CID != c {
 		return errors.New("CID mismatch: corrupted data")
 	}
@@ -322,8 +319,6 @@ func fetchRangeSeq(
 	}
 }
 
-// Fetch reconstructs the full file into a byte slice, using up to parallel
-// active fetches. It validates every block against its CID.
 func FetchParallel(ctx context.Context, s BlockGetter, manifestCID block.CID, parallel int) ([]byte, error) {
 	if parallel <= 0 {
 		parallel = 16
@@ -394,7 +389,6 @@ func fetchRange(ctx context.Context, s BlockGetter, cid block.CID, base uint64, 
 			return fmt.Errorf("node size mismatch: have %d want %d", np.Size, span)
 		}
 
-		// Launch children respecting order (for correctness) and allowing parallelism.
 		offset := base
 		tasks := 0
 		errCh := make(chan error, len(np.CIDs))
@@ -404,8 +398,7 @@ func fetchRange(ctx context.Context, s BlockGetter, cid block.CID, base uint64, 
 				return err
 			}
 			childSpan := np.Spans[i]
-			// tail-call small subtrees inline to save goroutines
-			if childSpan <= 1<<16 { // heuristic
+			if childSpan <= 1<<16 {
 				if err := fetchRange(ctx, s, childCID, offset, childSpan, out, sem, dec); err != nil {
 					return err
 				}

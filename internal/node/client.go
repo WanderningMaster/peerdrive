@@ -160,7 +160,6 @@ func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
 }
 
 func (n *Node) IterativeFindNode(ctx context.Context, target id.NodeID, want int) []routing.Contact {
-
 	visited := make(map[string]bool)
 	shortlist := n.rt.Closest(target, n.conf.KBucketK)
 	shortlist = uniqAndSortByDist(shortlist, target, visited)

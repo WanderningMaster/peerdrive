@@ -23,12 +23,11 @@ type Config struct {
 
 func Default() Config {
 	return Config{
-		IdBits:     256,
-		KBucketK:   20,
-		Alpha:      5,
-		Replicas:   5,
-		RpcTimeout: 10 * time.Second,
-		// Reasonable defaults
+		IdBits:             256,
+		KBucketK:           20,
+		Alpha:              5,
+		Replicas:           5,
+		RpcTimeout:         10 * time.Second,
 		BucketRefresh:      1 * time.Hour,
 		RecordTTL:          24 * time.Hour,
 		RepublishInterval:  12 * time.Hour,

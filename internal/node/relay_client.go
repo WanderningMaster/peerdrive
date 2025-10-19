@@ -14,8 +14,6 @@ import (
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
 )
 
-// AttachRelay establishes a long-lived connection to an inbound relay server
-// and serves incoming DeliverRequest frames over the attached stream.
 func (n *Node) AttachRelay(ctx context.Context, relayAddr string) error {
 	conn, err := net.Dial("tcp", relayAddr)
 	if err != nil {
@@ -57,7 +55,6 @@ func (n *Node) AttachRelay(ctx context.Context, relayAddr string) error {
 	}
 }
 
-// DialRpcViaRelay performs a single RPC to a target reachable via a relay server.
 func (n *Node) DialRpcViaRelay(ctx context.Context, relayAddr string, targetID string, req rpc.RpcMessage) (rpc.RpcMessage, error) {
 	ctx = logging.WithPrefix(ctx, logging.RelayClientPrefix)
 

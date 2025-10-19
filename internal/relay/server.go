@@ -12,9 +12,6 @@ import (
 	"github.com/WanderningMaster/peerdrive/internal/rpc"
 )
 
-// Server implements a simple inbound relay that maintains long-lived
-// registrations from nodes and forwards client requests to them over
-// that attached stream, correlating responses by ReqID.
 type Server struct {
 	ln net.Listener
 

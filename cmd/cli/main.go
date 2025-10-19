@@ -1,451 +1,189 @@
 package main
 
 import (
-	"flag"
 	"fmt"
-	"io"
 	"log"
-	"net/http"
-	"net/url"
 	"os"
-	"path/filepath"
-	"strings"
-    "encoding/json"
-    "text/tabwriter"
 
-    api "github.com/WanderningMaster/peerdrive/api"
+	api "github.com/WanderningMaster/peerdrive/api"
 	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/relay"
+	"github.com/spf13/cobra"
 )
 
 func main() {
-    if len(os.Args) < 2 {
-        usage()
-        os.Exit(2)
-    }
-    sub := os.Args[1]
-    switch sub {
-    case "init":
-        serveHTTP(os.Args[2:])
-    case "relay":
-        serveRelay(os.Args[2:])
-    case "kv":
-        if len(os.Args) < 3 {
-            fmt.Println("usage: peerdrive kv <add|get> [flags]")
-            os.Exit(2)
-        }
-        switch os.Args[2] {
-        case "add":
-            putHTTP(os.Args[3:])
-        case "get":
-            getHTTP(os.Args[3:])
-        default:
-            fmt.Println("usage: peerdrive kv <add|get> [flags]")
-            os.Exit(2)
-        }
-    case "add":
-        dfsPutHTTP(os.Args[2:])
-    case "get":
-        dfsGetHTTP(os.Args[2:])
-    case "bootstrap":
-        bootstrapHTTP(os.Args[2:])
-    case "pins":
-        pinsHTTP(os.Args[2:])
-    case "pin":
-        pinHTTP(os.Args[2:])
-    case "unpin":
-        unpinHTTP(os.Args[2:])
-    case "closest":
-        closestHTTP(os.Args[2:])
-    default:
-        usage()
-        os.Exit(2)
-    }
+	root := &cobra.Command{
+		Use:           "peerdrive",
+		Short:         "PeerDrive CLI",
+		Long:          "PeerDrive command-line interface.",
+		SilenceUsage:  true,
+		SilenceErrors: true,
+	}
+
+	var (
+		initBootstrap string
+		initRelay     string
+		initMem       bool
+	)
+	cmdInit := &cobra.Command{
+		Use:   "init",
+		Short: "Run node with built-in HTTP client",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			runInit(initBootstrap, initRelay, initMem)
+			return nil
+		},
+	}
+	cmdInit.Flags().StringVarP(&initBootstrap, "bootstrap", "b", "", "comma-separated peers to bootstrap (host:port)")
+	cmdInit.Flags().StringVarP(&initRelay, "relay", "r", "", "relay server addr (host:port) to attach")
+	cmdInit.Flags().BoolVarP(&initMem, "mem", "m", false, "use in-mem blockstore; defaults to on-disk")
+	root.AddCommand(cmdInit)
+
+	var relayListen string
+	cmdRelay := &cobra.Command{
+		Use:   "relay",
+		Short: "Run inbound relay server",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			runRelay(relayListen)
+			return nil
+		},
+	}
+	cmdRelay.Flags().StringVarP(&relayListen, "listen", "l", ":35000", "address to listen for relay server (host:port)")
+	root.AddCommand(cmdRelay)
+
+	cmdKV := &cobra.Command{Use: "kv", Short: "Key/value operations"}
+
+	var kvAddKey, kvAddVal string
+	cmdKVAdd := &cobra.Command{
+		Use:   "add",
+		Short: "Store key/value on a running node",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			kvPut(kvAddKey, kvAddVal)
+			return nil
+		},
+	}
+	cmdKVAdd.Flags().StringVarP(&kvAddKey, "key", "k", "", "key (string; passed as-is to server)")
+	cmdKVAdd.Flags().StringVarP(&kvAddVal, "value", "v", "", "value")
+	_ = cmdKVAdd.MarkFlagRequired("key")
+	cmdKV.AddCommand(cmdKVAdd)
+
+	var kvGetKey string
+	cmdKVGet := &cobra.Command{
+		Use:   "get",
+		Short: "Fetch value from a running node",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			kvGet(kvGetKey)
+			return nil
+		},
+	}
+	cmdKVGet.Flags().StringVarP(&kvGetKey, "key", "k", "", "key (string; passed as-is to server)")
+	_ = cmdKVGet.MarkFlagRequired("key")
+	cmdKV.AddCommand(cmdKVGet)
+	root.AddCommand(cmdKV)
+
+	var addIn string
+	cmdAdd := &cobra.Command{
+		Use:   "add",
+		Short: "Add file to DFS; prints CID",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dfsPut(addIn)
+			return nil
+		},
+	}
+	cmdAdd.Flags().StringVarP(&addIn, "in", "i", "", "input file path to add to DFS")
+	_ = cmdAdd.MarkFlagRequired("in")
+	root.AddCommand(cmdAdd)
+
+	var getCID, getOut string
+	cmdGet := &cobra.Command{
+		Use:   "get",
+		Short: "Fetch DFS content by CID",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			dfsGet(getCID, getOut)
+			return nil
+		},
+	}
+	cmdGet.Flags().StringVarP(&getCID, "cid", "c", "", "CID of the DFS manifest to fetch")
+	cmdGet.Flags().StringVarP(&getOut, "out", "o", "", "optional output file path; if omitted, writes to stdout")
+	_ = cmdGet.MarkFlagRequired("cid")
+	root.AddCommand(cmdGet)
+
+	var bootstrapPeers string
+	cmdBootstrap := &cobra.Command{
+		Use:   "bootstrap",
+		Short: "Connect a running node to peers",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			bootstrap(bootstrapPeers)
+			return nil
+		},
+	}
+	cmdBootstrap.Flags().StringVarP(&bootstrapPeers, "peers", "p", "", "comma-separated peers to bootstrap (host:port)")
+	_ = cmdBootstrap.MarkFlagRequired("peers")
+	root.AddCommand(cmdBootstrap)
+
+	cmdPins := &cobra.Command{
+		Use:   "pins",
+		Short: "List pinned CIDs",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pins()
+			return nil
+		},
+	}
+	root.AddCommand(cmdPins)
+
+	var pinCID string
+	cmdPin := &cobra.Command{
+		Use:   "pin",
+		Short: "Pin a CID",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			pin(pinCID)
+			return nil
+		},
+	}
+	cmdPin.Flags().StringVarP(&pinCID, "cid", "c", "", "CID to pin")
+	_ = cmdPin.MarkFlagRequired("cid")
+	root.AddCommand(cmdPin)
+
+	var unpinCID string
+	cmdUnpin := &cobra.Command{
+		Use:   "unpin",
+		Short: "Unpin a CID",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			unpin(unpinCID)
+			return nil
+		},
+	}
+	cmdUnpin.Flags().StringVarP(&unpinCID, "cid", "c", "", "CID to unpin")
+	_ = cmdUnpin.MarkFlagRequired("cid")
+	root.AddCommand(cmdUnpin)
+
+	var closestTarget string
+	var closestK int
+	cmdClosest := &cobra.Command{
+		Use:   "closest",
+		Short: "List closest contacts",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			closest(closestTarget, closestK)
+			return nil
+		},
+	}
+	cmdClosest.Flags().StringVarP(&closestTarget, "target", "t", "", "hex NodeID to use as target (defaults to self)")
+	cmdClosest.Flags().IntVarP(&closestK, "k", "k", 0, "number of contacts to return (defaults to server conf)")
+	root.AddCommand(cmdClosest)
+
+	if err := root.Execute(); err != nil {
+		fmt.Fprintln(os.Stderr, err)
+		os.Exit(1)
+	}
 }
 
-func usage() {
-    fmt.Println(`peerdrive <command> [flags]
-Commands:
-init Run a node and start the built-in HTTP Client (/id, /put, /get, /dfs/{cid}, /dfs/put)
-relay Run an inbound relay server for attached nodes
-kv add Store key/value on a running node
-kv get Fetch value from a running node
-add Add file to DFS from path; prints resulting CID
-get Fetch DFS content by CID; write to -out or stdout (pipe)
-bootstrap Connect a running node to comma-separated peers
-pins List pinned CIDs from the running node
-pin Pin a CID in the running node
-unpin Unpin a CID in the running node
-closest List closest contacts (optionally -target and -k)
-Use -h after a command for flags.`)
-}
-
-func serveHTTP(args []string) {
-	fs := flag.NewFlagSet("init", flag.ExitOnError)
-	boot := fs.String("bootstrap", "", "comma-separated peers to bootstrap (host:port)")
-	relayAddr := fs.String("relay", "", "relay server addr (host:port) to attach")
-	mem := fs.Bool("mem", false, "use in-mem blockstore; defaults to on-disk")
-
-	fs.Parse(args)
-
+func runInit(bootstrap, relayAddr string, mem bool) {
 	conf := configuration.LoadUserConfig()
-    api.BootstrapHttpClient(conf, boot, relayAddr, mem)
-
+	api.BootstrapHttpClient(conf, &bootstrap, &relayAddr, &mem)
 }
 
-func serveRelay(args []string) {
-	fs := flag.NewFlagSet("relay", flag.ExitOnError)
-	listen := fs.String("listen", ":35000", "address to listen for relay server (host:port)")
-	fs.Parse(args)
-
+func runRelay(listen string) {
 	srv := relay.NewServer()
-	if err := srv.ListenAndServe(*listen); err != nil {
+	if err := srv.ListenAndServe(listen); err != nil {
 		log.Fatal(err)
 	}
-}
-
-func putHTTP(args []string) {
-	conf := configuration.LoadUserConfig()
-
-	fs := flag.NewFlagSet("put", flag.ExitOnError)
-	key := fs.String("key", "", "key (string; passed as-is to server)")
-	val := fs.String("value", "", "value")
-	fs.Parse(args)
-	if *key == "" {
-		log.Fatal("-key is required")
-	}
-
-	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = "/put"
-	q := u.Query()
-	q.Set("key", *key)
-	q.Set("value", *val)
-	u.RawQuery = q.Encode()
-
-	resp, err := http.Post(u.String(), "application/json", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	printOk(resp)
-}
-
-func getHTTP(args []string) {
-	conf := configuration.LoadUserConfig()
-
-	fs := flag.NewFlagSet("get", flag.ExitOnError)
-	key := fs.String("key", "", "key (string; passed as-is to server)")
-	fs.Parse(args)
-	if *key == "" {
-		log.Fatal("-key is required")
-	}
-
-	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = "/get"
-	q := u.Query()
-	q.Set("key", *key)
-	u.RawQuery = q.Encode()
-
-	resp, err := http.Get(u.String())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	printGet(resp)
-}
-
-func dfsPutHTTP(args []string) {
-    conf := configuration.LoadUserConfig()
-
-    fs := flag.NewFlagSet("add", flag.ExitOnError)
-    in := fs.String("in", "", "input file path to add to DFS")
-	fs.Parse(args)
-	if *in == "" {
-		log.Fatal("-in is required")
-	}
-	inPath := *in
-	if !filepath.IsAbs(inPath) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
-		}
-		inPath = filepath.Clean(filepath.Join(cwd, inPath))
-	}
-
-	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = "/dfs/put"
-	q := u.Query()
-	q.Set("in", inPath)
-	u.RawQuery = q.Encode()
-
-	resp, err := http.Post(u.String(), "application/json", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	printDfsPut(resp)
-}
-
-func dfsGetHTTP(args []string) {
-    conf := configuration.LoadUserConfig()
-
-    fs := flag.NewFlagSet("get", flag.ExitOnError)
-    cid := fs.String("cid", "", "CID of the DFS manifest to fetch")
-    out := fs.String("out", "", "optional output file path; if omitted, writes to stdout")
-    fs.Parse(args)
-    if *cid == "" {
-        log.Fatal("-cid is required")
-    }
-
-    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-    if err != nil {
-        log.Fatal(err)
-    }
-    u.Path = "/dfs/" + *cid
-
-    resp, err := http.Get(u.String())
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer resp.Body.Close()
-    if resp.StatusCode != 200 {
-        // read error as JSON/message
-        b, _ := io.ReadAll(resp.Body)
-        log.Fatalf("server error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
-    }
-
-    if *out != "" {
-        outPath := *out
-        if !filepath.IsAbs(outPath) {
-            cwd, err := os.Getwd()
-            if err != nil {
-                log.Fatal(err)
-            }
-            outPath = filepath.Clean(filepath.Join(cwd, outPath))
-        }
-        f, err := os.Create(outPath)
-        if err != nil {
-            log.Fatal(err)
-        }
-        defer f.Close()
-        if _, err := io.Copy(f, resp.Body); err != nil {
-            log.Fatal(err)
-        }
-        return
-    }
-    // stream to stdout for piping
-    if _, err := io.Copy(os.Stdout, resp.Body); err != nil {
-        log.Fatal(err)
-    }
-}
-
-func bootstrapHTTP(args []string) {
-	conf := configuration.LoadUserConfig()
-
-	fs := flag.NewFlagSet("bootstrap", flag.ExitOnError)
-	peers := fs.String("peers", "", "comma-separated peers to bootstrap (host:port)")
-	fs.Parse(args)
-	if *peers == "" {
-		log.Fatal("-peers is required")
-	}
-
-	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = "/bootstrap"
-	q := u.Query()
-	q.Set("peers", *peers)
-	u.RawQuery = q.Encode()
-
-	resp, err := http.Post(u.String(), "application/json", nil)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	printBootstrap(resp)
-}
-
-func pinsHTTP(args []string) {
-    conf := configuration.LoadUserConfig()
-    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-    if err != nil { log.Fatal(err) }
-    u.Path = "/pins"
-    resp, err := http.Get(u.String())
-    if err != nil { log.Fatal(err) }
-    defer resp.Body.Close()
-    printPins(resp)
-}
-
-func pinHTTP(args []string) {
-    conf := configuration.LoadUserConfig()
-    fs := flag.NewFlagSet("pin", flag.ExitOnError)
-    cid := fs.String("cid", "", "CID to pin")
-    fs.Parse(args)
-    if *cid == "" { log.Fatal("-cid is required") }
-    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-    if err != nil { log.Fatal(err) }
-    u.Path = "/pin"
-    q := u.Query()
-    q.Set("cid", *cid)
-    u.RawQuery = q.Encode()
-    resp, err := http.Post(u.String(), "application/json", nil)
-    if err != nil { log.Fatal(err) }
-    defer resp.Body.Close()
-    printOk(resp)
-}
-
-func unpinHTTP(args []string) {
-    conf := configuration.LoadUserConfig()
-    fs := flag.NewFlagSet("unpin", flag.ExitOnError)
-    cid := fs.String("cid", "", "CID to unpin")
-    fs.Parse(args)
-    if *cid == "" { log.Fatal("-cid is required") }
-    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-    if err != nil { log.Fatal(err) }
-    u.Path = "/unpin"
-    q := u.Query()
-    q.Set("cid", *cid)
-    u.RawQuery = q.Encode()
-    resp, err := http.Post(u.String(), "application/json", nil)
-    if err != nil { log.Fatal(err) }
-    defer resp.Body.Close()
-    printOk(resp)
-}
-
-func closestHTTP(args []string) {
-    conf := configuration.LoadUserConfig()
-    fs := flag.NewFlagSet("closest", flag.ExitOnError)
-    target := fs.String("target", "", "hex NodeID to use as target (defaults to self)")
-    k := fs.Int("k", 0, "number of contacts to return (defaults to server conf)")
-    fs.Parse(args)
-
-    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-    if err != nil { log.Fatal(err) }
-    u.Path = "/closest"
-    q := u.Query()
-    if *target != "" { q.Set("target", *target) }
-    if *k > 0 { q.Set("k", fmt.Sprintf("%d", *k)) }
-    u.RawQuery = q.Encode()
-
-    resp, err := http.Get(u.String())
-    if err != nil { log.Fatal(err) }
-    defer resp.Body.Close()
-    printClosest(resp)
-}
-
-func readAndCheck(resp *http.Response) ([]byte, error) {
-    b, _ := io.ReadAll(resp.Body)
-    if resp.StatusCode != 200 {
-        var e any
-        if json.Unmarshal(b, &e) == nil {
-            pretty, _ := json.MarshalIndent(e, "", "  ")
-            return nil, fmt.Errorf("server error %d:\n%s", resp.StatusCode, string(pretty))
-        }
-        return nil, fmt.Errorf("server error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
-    }
-    return b, nil
-}
-
-func printOk(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    var m struct{ Ok bool `json:"ok"` }
-    if json.Unmarshal(b, &m) == nil && m.Ok {
-        fmt.Println("ok")
-        return
-    }
-    fmt.Println(string(b))
-}
-
-func printGet(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    var m struct{ Found bool `json:"found"`; Value string `json:"value"` }
-    if json.Unmarshal(b, &m) == nil && m.Found {
-        fmt.Println(m.Value)
-        return
-    }
-    fmt.Println(string(b))
-}
-
-func printDfsPut(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    var m struct{ CID string `json:"cid"` }
-    if json.Unmarshal(b, &m) == nil && m.CID != "" {
-        fmt.Println(m.CID)
-        return
-    }
-    fmt.Println(string(b))
-}
-
-func printDfsGet(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    var m struct{ Ok bool `json:"ok"`; Out string `json:"out"`; Bytes int `json:"bytes"` }
-    if json.Unmarshal(b, &m) == nil && m.Ok {
-        fmt.Printf("wrote %d bytes to %s\n", m.Bytes, m.Out)
-        return
-    }
-    fmt.Println(string(b))
-}
-
-func printBootstrap(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    var m struct{ Ok bool `json:"ok"`; Peers []string `json:"peers"` }
-    if json.Unmarshal(b, &m) == nil && m.Ok {
-        if len(m.Peers) == 0 {
-            fmt.Println("ok")
-        } else {
-            fmt.Printf("ok: %d peers\n", len(m.Peers))
-            for _, p := range m.Peers { fmt.Println("-", p) }
-        }
-        return
-    }
-    fmt.Println(string(b))
-}
-
-func printPins(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    type pinInfo struct{ CID, Name, Mime string }
-    var arr []pinInfo
-    if json.Unmarshal(b, &arr) == nil {
-        tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
-        fmt.Fprintln(tw, "CID\tNAME\tMIME")
-        for _, p := range arr {
-            fmt.Fprintf(tw, "%s\t%s\t%s\n", p.CID, p.Name, p.Mime)
-        }
-        _ = tw.Flush()
-        return
-    }
-    fmt.Println(string(b))
-}
-
-func printClosest(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    type contact struct{ ID, Addr, Relay string }
-    var arr []contact
-    if json.Unmarshal(b, &arr) == nil {
-        tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
-        fmt.Fprintln(tw, "ID\tADDR\tRELAY")
-        for _, c := range arr {
-            fmt.Fprintf(tw, "%s\t%s\t%s\n", c.ID, c.Addr, c.Relay)
-        }
-        _ = tw.Flush()
-        return
-    }
-    fmt.Println(string(b))
 }

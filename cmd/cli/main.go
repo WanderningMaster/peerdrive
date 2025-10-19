@@ -8,6 +8,7 @@ import (
 	api "github.com/WanderningMaster/peerdrive/api"
 	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/relay"
+	daemon "github.com/coreos/go-systemd/v22/daemon"
 	"github.com/spf13/cobra"
 )
 
@@ -183,7 +184,13 @@ func runInit(bootstrap, relayAddr string, mem bool) {
 
 func runRelay(listen string) {
 	srv := relay.NewServer()
-	if err := srv.ListenAndServe(listen); err != nil {
-		log.Fatal(err)
-	}
+	go func() {
+		if err := srv.ListenAndServe(listen); err != nil {
+			log.Fatal(err)
+		}
+	}()
+
+	_, _ = daemon.SdNotify(false, daemon.SdNotifyReady)
+
+	select {}
 }

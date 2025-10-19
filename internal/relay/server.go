@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net"
 	"sync"
 
@@ -86,6 +87,7 @@ func (s *Server) handleConn(c net.Conn) {
 
 func (s *Server) handlWhoami(c net.Conn, dec *json.Decoder, enc *json.Encoder, first Frame) {
 	remoteHost, _, err := net.SplitHostPort(c.RemoteAddr().String())
+	fmt.Println("WhoAmI", remoteHost)
 	if err != nil {
 		_ = enc.Encode(Frame{Type: Whoami, ReqID: first.ReqID, Error: "whoami failed"})
 		return

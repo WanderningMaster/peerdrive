@@ -93,7 +93,7 @@ func (n *Node) ClosestContacts(target id.NodeID, k int) []routing.Contact {
 }
 
 func (n *Node) StartMaintenance(ctx context.Context) {
-	ctx = logging.WithPrefix(ctx, logging.ServerPrefix)
+	ctx = logging.WithPrefix(ctx, logging.Maintainance)
 
 	go n.gcLoop(ctx)
 	go n.republishLoop(ctx)
@@ -111,19 +111,26 @@ func (n *Node) KBucketK() int { return n.conf.KBucketK }
 func (n *Node) gcLoop(ctx context.Context) {
 	t := time.NewTicker(n.conf.GCInterval)
 	defer t.Stop()
+	logging.Logf(ctx, "gc loop started interval=%s", n.conf.GCInterval)
 	for {
 		select {
 		case <-ctx.Done():
+			logging.Logf(ctx, "gc loop stopped")
 			return
 		case <-t.C:
 			now := time.Now()
 			n.storeMu.Lock()
+			deleted := 0
 			for k, rec := range n.store {
 				if now.After(rec.Expires) {
 					delete(n.store, k)
+					deleted++
 				}
 			}
 			n.storeMu.Unlock()
+			if deleted > 0 {
+				logging.Logf(ctx, "gc expired=%d", deleted)
+			}
 		}
 	}
 }
@@ -131,9 +138,11 @@ func (n *Node) gcLoop(ctx context.Context) {
 func (n *Node) republishLoop(ctx context.Context) {
 	t := time.NewTicker(n.conf.RepublishInterval)
 	defer t.Stop()
+	logging.Logf(ctx, "republish loop started interval=%s", n.conf.RepublishInterval)
 	for {
 		select {
 		case <-ctx.Done():
+			logging.Logf(ctx, "republish loop stopped")
 			return
 		case <-t.C:
 			now := time.Now()
@@ -151,12 +160,17 @@ func (n *Node) republishLoop(ctx context.Context) {
 				}
 			}
 			n.storeMu.RUnlock()
+			republished := 0
 			for _, it := range items {
 				// Republish when the remaining TTL is less than or equal to the republish interval
 				remaining := it.expires.Sub(now)
 				if it.origin && remaining <= n.conf.RepublishInterval {
 					_ = n.Store(ctx, it.key, it.val)
+					republished++
 				}
+			}
+			if republished > 0 {
+				logging.Logf(ctx, "republished=%d", republished)
 			}
 		}
 	}
@@ -165,13 +179,16 @@ func (n *Node) republishLoop(ctx context.Context) {
 func (n *Node) refreshLoop(ctx context.Context) {
 	t := time.NewTicker(n.conf.BucketRefresh)
 	defer t.Stop()
+	logging.Logf(ctx, "refresh loop started interval=%s", n.conf.BucketRefresh)
 	for {
 		select {
 		case <-ctx.Done():
+			logging.Logf(ctx, "refresh loop stopped")
 			return
 		case <-t.C:
 			target := id.RandomID()
-			_ = n.IterativeFindNode(ctx, target, n.conf.KBucketK)
+			nodes := n.IterativeFindNode(ctx, target, n.conf.KBucketK)
+			logging.Logf(ctx, "bucket refresh nodes=%d", len(nodes))
 		}
 	}
 }
@@ -179,17 +196,24 @@ func (n *Node) refreshLoop(ctx context.Context) {
 func (n *Node) revalidateLoop(ctx context.Context) {
 	t := time.NewTicker(n.conf.RevalidateInterval)
 	defer t.Stop()
+	logging.Logf(ctx, "revalidate loop started interval=%s", n.conf.RevalidateInterval)
 	for {
 		select {
 		case <-ctx.Done():
+			logging.Logf(ctx, "revalidate loop stopped")
 			return
 		case <-t.C:
 			target := id.RandomID()
 			sample := n.rt.Closest(target, n.conf.Alpha)
+			failed := 0
 			for _, c := range sample {
 				if err := n.Ping(ctx, c.Addr); err != nil {
 					n.onRpcFailure(c)
+					failed++
 				}
+			}
+			if len(sample) > 0 {
+				logging.Logf(ctx, "revalidated peers=%d failed=%d", len(sample), failed)
 			}
 		}
 	}

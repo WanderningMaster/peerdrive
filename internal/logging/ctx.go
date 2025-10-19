@@ -11,6 +11,8 @@ const (
 	ClientPrefix      = "client"
 	ServerPrefix      = "server"
 	RelayClientPrefix = "relay_client"
+	Maintainance      = "maintainance"
+	Reprovider        = "reprovider"
 )
 
 const envPrefixKey logKeyType = iota

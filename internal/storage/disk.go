@@ -85,6 +85,7 @@ func (s *DiskStore) PutBlock(ctx context.Context, b *block.Block) error {
 	if err := s.PutBlockLocally(ctx, b); err != nil {
 		return err
 	}
+
 	if s.fetcher != nil {
 		return s.fetcher.Announce(ctx, b.CID)
 	}

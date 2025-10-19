@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"fmt"
 	"io"
 	"log"
 	"mime"
@@ -112,6 +113,7 @@ func (s *Service) Unpin(ctx context.Context, cid block.CID) error { return s.sto
 type PinInfo struct {
 	CID  string `json:"cid"`
 	Name string `json:"name,omitempty"`
+	Size int    `json:"size,omitempty"`
 	Mime string `json:"mime,omitempty"`
 }
 
@@ -132,6 +134,7 @@ func (s *Service) ListPins(ctx context.Context) ([]PinInfo, error) {
 			if err := dec.Unmarshal(b.Payload, &mp); err == nil {
 				pi.Name = mp.Name
 				pi.Mime = mp.Mime
+				pi.Size = int(mp.Size)
 			}
 		}
 		out = append(out, pi)
@@ -223,6 +226,7 @@ func (s *Service) Start(ctx context.Context, relayAddr string, peers []string) {
 
 	// FIXME???
 	m, _ := s.n.WhoAmI(ctx, "3.127.69.180:20018")
+	fmt.Println(string(m.Value))
 	s.n.SetAdvertisedAddr(net.JoinHostPort(string(m.Value), strconv.Itoa(s.conf.TcpPort)))
 
 	if relayAddr == "" && s.conf.Relay != "" {
@@ -241,7 +245,106 @@ func (s *Service) Start(ctx context.Context, relayAddr string, peers []string) {
 			return
 		}
 	}
+
 	s.n.StartMaintenance(ctx)
+	s.startReprovider(ctx, time.Hour*6)
+	s.startBlockstoreGC(ctx, time.Hour)
 
 	_, _ = daemon.SdNotify(false, daemon.SdNotifyReady)
+}
+
+// launches a background loop that periodically scans pinned
+// roots and announces provider records for all locally present DAG blocks.
+func (s *Service) startReprovider(ctx context.Context, interval time.Duration) {
+	ctx = logging.WithPrefix(ctx, "reprovider")
+
+	logging.Logf(ctx, "reprovider loop starting interval=%s", interval)
+	go func() {
+		// Run one pass after startup
+		s.reprovideOnce(ctx)
+
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				logging.Logf(ctx, "reprovider loop stopped")
+				return
+			case <-t.C:
+				s.reprovideOnce(ctx)
+			}
+		}
+	}()
+}
+
+func (s *Service) reprovideOnce(ctx context.Context) {
+	start := time.Now()
+	pins, err := s.store.ListPins(ctx)
+	if err != nil {
+		logging.Logf(ctx, "reprovide: list pins error: %v", err)
+		return
+	}
+	visited := make(map[block.CID]struct{}, len(pins)*4)
+	announced := 0
+	for _, root := range pins {
+		stack := []block.CID{root}
+		for len(stack) > 0 {
+			last := len(stack) - 1
+			c := stack[last]
+			stack = stack[:last]
+
+			if _, seen := visited[c]; seen {
+				continue
+			}
+			visited[c] = struct{}{}
+
+			blk, err := s.store.GetBlockLocal(ctx, c)
+			if err != nil || blk == nil {
+				continue
+			}
+
+			if err := s.n.PutProviderRecord(ctx, c); err == nil {
+				announced++
+			}
+
+			children, err := dag.ChildCIDsFromBlock(blk)
+			if err != nil {
+				continue
+			}
+			stack = append(stack, children...)
+
+			select {
+			case <-ctx.Done():
+				return
+			case <-time.After(10 * time.Millisecond):
+			}
+		}
+	}
+	dur := time.Since(start)
+	logging.Logf(ctx, "reprovide pass pins=%d visited=%d announced=%d dur=%s", len(pins), len(visited), announced, dur)
+}
+
+func (s *Service) startBlockstoreGC(ctx context.Context, interval time.Duration) {
+	ctx = logging.WithPrefix(ctx, "gc_store")
+
+	if interval <= 0 {
+		return
+	}
+	go func() {
+		t := time.NewTicker(interval)
+		defer t.Stop()
+		for {
+			select {
+			case <-ctx.Done():
+				return
+			case <-t.C:
+				freed, err := s.store.GC(ctx)
+				if err != nil && err != context.Canceled {
+					log.Printf("GC error: %v", err)
+				} else if freed > 0 {
+					log.Printf("GC freed %d blocks", freed)
+				}
+			}
+		}
+	}()
 }

@@ -6,7 +6,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"net/http"
-	"os"
 	"strconv"
 	"strings"
 
@@ -68,29 +67,45 @@ func NewMux(svc *service.Service) *http.ServeMux {
 		writeJSON(w, map[string]any{"found": true, "value": string(val)})
 	})
 
-	mux.HandleFunc("/dfs/{cid}", func(w http.ResponseWriter, r *http.Request) {
-		cidStr := r.PathValue("cid")
-		outPath := r.URL.Query().Get("out")
-		if outPath == "" {
-			writeErr(w, 400, "out required")
-			return
-		}
-		cid, err := block.DecodeCID(cidStr)
-		if err != nil {
-			writeErr(w, 400, err.Error())
-			return
-		}
-		b, err := svc.Fetch(r.Context(), cid)
-		if err != nil {
-			writeErr(w, 500, err.Error())
-			return
-		}
-		if err := os.WriteFile(outPath, b, 0644); err != nil {
-			writeErr(w, 500, err.Error())
-			return
-		}
-		writeJSON(w, map[string]any{"ok": true, "out": outPath, "bytes": len(b)})
-	})
+    mux.HandleFunc("/dfs/{cid}", func(w http.ResponseWriter, r *http.Request) {
+        cidStr := r.PathValue("cid")
+        cid, err := block.DecodeCID(cidStr)
+        if err != nil {
+            writeErr(w, 400, err.Error())
+            return
+        }
+        b, err := svc.Fetch(r.Context(), cid)
+        if err != nil {
+            writeErr(w, 500, err.Error())
+            return
+        }
+        // Always return raw content for preview/download with appropriate headers
+        name, mime, err := svc.ManifestMeta(r.Context(), cid)
+        if err != nil {
+            // Not a manifest or decode error; continue with best-effort content type
+            name, mime = "", ""
+        }
+
+        if mime == "" {
+            if len(b) > 0 {
+                if len(b) > 512 {
+                    w.Header().Set("Content-Type", http.DetectContentType(b[:512]))
+                } else {
+                    w.Header().Set("Content-Type", http.DetectContentType(b))
+                }
+            } else {
+                w.Header().Set("Content-Type", "application/octet-stream")
+            }
+        } else {
+            w.Header().Set("Content-Type", mime)
+        }
+        if name != "" {
+            w.Header().Set("Content-Disposition", fmt.Sprintf("inline; filename=%q", name))
+            w.Header().Set("X-File-Name", name)
+        }
+        w.WriteHeader(http.StatusOK)
+        _, _ = w.Write(b)
+    })
 
 	mux.HandleFunc("/dfs/put", func(w http.ResponseWriter, r *http.Request) {
 		inPath := r.URL.Query().Get("in")
@@ -148,13 +163,8 @@ func NewMux(svc *service.Service) *http.ServeMux {
 			writeErr(w, 500, err.Error())
 			return
 		}
-		out := make([]string, 0, len(pins))
-		for _, c := range pins {
-			if s, err := c.Encode(); err == nil {
-				out = append(out, s)
-			}
-		}
-		writeJSON(w, out)
+		// Directly return the enriched pin info: {cid, name, mime}
+		writeJSON(w, pins)
 	})
 
 	mux.HandleFunc("/closest", func(w http.ResponseWriter, r *http.Request) {

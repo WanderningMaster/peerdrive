@@ -94,7 +94,7 @@ func main() {
 		log.Fatalf("rand: %v", err)
 	}
 
-	_, cid, err := builder.BuildFromReader(ctx, "random.bin", bytes.NewReader(payload))
+    _, cid, err := builder.BuildFromReader(ctx, "random.bin", "application/octet-stream", bytes.NewReader(payload))
 	if err != nil {
 		log.Fatalf("build: %v", err)
 	}

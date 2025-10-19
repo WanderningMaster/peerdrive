@@ -1,12 +1,19 @@
 package service
 
 import (
-	"context"
-	"log"
-	"net"
-	"os"
-	"strconv"
-	"time"
+    "bytes"
+    "context"
+    "errors"
+    "io"
+    "log"
+    "mime"
+    "net"
+    nethttp "net/http"
+    "os"
+    "path/filepath"
+    "strconv"
+    "strings"
+    "time"
 
 	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/block"
@@ -17,6 +24,8 @@ import (
 	"github.com/WanderningMaster/peerdrive/internal/node"
 	"github.com/WanderningMaster/peerdrive/internal/routing"
 	"github.com/WanderningMaster/peerdrive/internal/storage"
+	"github.com/WanderningMaster/peerdrive/internal/util"
+	"github.com/fxamacker/cbor/v2"
 )
 
 type Service struct {
@@ -58,25 +67,95 @@ func (s *Service) Put(ctx context.Context, key string, val []byte) error {
 func (s *Service) Get(ctx context.Context, key string) ([]byte, error) { return s.n.Get(ctx, key) }
 
 func (s *Service) AddFromPath(ctx context.Context, inPath string) (string, error) {
-	f, err := os.Open(inPath)
-	if err != nil {
-		return "", err
-	}
-	defer f.Close()
-	_, cid, err := s.builder.BuildFromReader(ctx, "example.txt", f)
-	if err != nil {
-		return "", err
-	}
-	return cid.Encode()
+    // Derive file name from path
+    name := filepath.Base(inPath)
+    if strings.TrimSpace(name) == "" || name == "." || name == string(filepath.Separator) {
+        name = "file"
+    }
+
+    f, err := os.Open(inPath)
+    if err != nil {
+        return "", err
+    }
+    defer f.Close()
+
+    // Peek first bytes to detect MIME
+    header := make([]byte, 512)
+    n, _ := io.ReadFull(f, header)
+    header = header[:n]
+    ctype := nethttp.DetectContentType(header)
+    if ctype == "application/octet-stream" {
+        if ext := strings.ToLower(filepath.Ext(name)); ext != "" {
+            if t := mime.TypeByExtension(ext); t != "" {
+                ctype = t
+            }
+        }
+    }
+
+    // Reconstruct full reader including consumed header bytes
+    r := io.MultiReader(bytes.NewReader(header), f)
+
+    _, cid, err := s.builder.BuildFromReader(ctx, name, ctype, r)
+    if err != nil {
+        return "", err
+    }
+    return cid.Encode()
 }
 
 func (s *Service) Fetch(ctx context.Context, cid block.CID) ([]byte, error) {
 	return dag.Fetch(ctx, s.store, cid)
 }
 
-func (s *Service) Pin(ctx context.Context, cid block.CID) error      { return s.store.Pin(ctx, cid) }
-func (s *Service) Unpin(ctx context.Context, cid block.CID) error    { return s.store.Unpin(ctx, cid) }
-func (s *Service) ListPins(ctx context.Context) ([]block.CID, error) { return s.store.ListPins(ctx) }
+func (s *Service) Pin(ctx context.Context, cid block.CID) error   { return s.store.Pin(ctx, cid) }
+func (s *Service) Unpin(ctx context.Context, cid block.CID) error { return s.store.Unpin(ctx, cid) }
+
+type PinInfo struct {
+	CID  string `json:"cid"`
+	Name string `json:"name,omitempty"`
+	Mime string `json:"mime,omitempty"`
+}
+
+func (s *Service) ListPins(ctx context.Context) ([]PinInfo, error) {
+	cids, err := s.store.ListPins(ctx)
+	if err != nil {
+		return nil, err
+	}
+	out := make([]PinInfo, 0, len(cids))
+	dec := util.Must(cbor.DecOptions{TimeTag: cbor.DecTagIgnored}.DecMode())
+	for _, c := range cids {
+		var pi PinInfo
+		if enc, err := c.Encode(); err == nil {
+			pi.CID = enc
+		}
+		// Try to load manifest and extract metadata.
+		if b, err := s.store.GetBlock(ctx, c); err == nil && b != nil && b.Header.Type == block.BlockManifest {
+			var mp dag.ManifestPayload
+			if err := dec.Unmarshal(b.Payload, &mp); err == nil {
+				pi.Name = mp.Name
+				pi.Mime = mp.Mime
+			}
+		}
+		out = append(out, pi)
+	}
+	return out, nil
+}
+
+// ManifestMeta returns the Name and Mime from the manifest, if cid points to a manifest.
+func (s *Service) ManifestMeta(ctx context.Context, cid block.CID) (string, string, error) {
+    b, err := s.store.GetBlock(ctx, cid)
+    if err != nil {
+        return "", "", err
+    }
+    if b == nil || b.Header.Type != block.BlockManifest {
+        return "", "", errors.New("not a manifest")
+    }
+    var mp dag.ManifestPayload
+    dec := util.Must(cbor.DecOptions{TimeTag: cbor.DecTagIgnored}.DecMode())
+    if err := dec.Unmarshal(b.Payload, &mp); err != nil {
+        return "", "", err
+    }
+    return mp.Name, mp.Mime, nil
+}
 
 func (s *Service) Closest(target id.NodeID, k int) []routing.Contact {
 	return s.n.ClosestContacts(target, k)

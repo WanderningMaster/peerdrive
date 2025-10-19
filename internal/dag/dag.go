@@ -55,7 +55,7 @@ func DefaultBuilder(store BlockPutGetter) *DagBuilder {
 
 // BuildFromReader ingests r, builds the Merkle DAG, stores all blocks, and
 // returns the manifest block and its CID.
-func (b *DagBuilder) BuildFromReader(ctx context.Context, name string, r io.Reader) (*block.Block, block.CID, error) {
+func (b *DagBuilder) BuildFromReader(ctx context.Context, name string, mime string, r io.Reader) (*block.Block, block.CID, error) {
 	if b.ChunkSize <= 0 || b.Fanout <= 1 {
 		return nil, block.CID{}, errors.New("invalid builder params")
 	}
@@ -152,7 +152,7 @@ func (b *DagBuilder) BuildFromReader(ctx context.Context, name string, r io.Read
 
 	root := cur[0]
 
-	mp := ManifestPayload{V: 1, Size: total, Chunk: uint32(b.ChunkSize), Fanout: uint16(b.Fanout), Root: root.cid.ToBytes(), Name: name}
+	mp := ManifestPayload{V: 1, Size: total, Chunk: uint32(b.ChunkSize), Fanout: uint16(b.Fanout), Root: root.cid.ToBytes(), Name: name, Mime: mime}
 	var mbytes bytes.Buffer
 	if err := enc.NewEncoder(&mbytes).Encode(mp); err != nil {
 		return nil, block.CID{}, fmt.Errorf("encode manifest: %w", err)

@@ -71,7 +71,7 @@ relay Run an inbound relay server for attached nodes
 kv add Store key/value on a running node
 kv get Fetch value from a running node
 add Add file to DFS from path; prints resulting CID
-get Fetch DFS content by CID and write to path
+get Fetch DFS content by CID; write to -out or stdout (pipe)
 bootstrap Connect a running node to comma-separated peers
 pins List pinned CIDs from the running node
 pin Pin a CID in the running node
@@ -200,39 +200,52 @@ func dfsGetHTTP(args []string) {
 
     fs := flag.NewFlagSet("get", flag.ExitOnError)
     cid := fs.String("cid", "", "CID of the DFS manifest to fetch")
-    out := fs.String("out", "", "output file path to write the fetched content")
-	fs.Parse(args)
-	if *cid == "" {
-		log.Fatal("-cid is required")
-	}
-	if *out == "" {
-		log.Fatal("-out is required")
-	}
+    out := fs.String("out", "", "optional output file path; if omitted, writes to stdout")
+    fs.Parse(args)
+    if *cid == "" {
+        log.Fatal("-cid is required")
+    }
 
-	outPath := *out
-	if !filepath.IsAbs(outPath) {
-		cwd, err := os.Getwd()
-		if err != nil {
-			log.Fatal(err)
-		}
-		outPath = filepath.Clean(filepath.Join(cwd, outPath))
-	}
+    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
+    if err != nil {
+        log.Fatal(err)
+    }
+    u.Path = "/dfs/" + *cid
 
-	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-	if err != nil {
-		log.Fatal(err)
-	}
-	u.Path = "/dfs/" + *cid
-	q := u.Query()
-	q.Set("out", outPath)
-	u.RawQuery = q.Encode()
+    resp, err := http.Get(u.String())
+    if err != nil {
+        log.Fatal(err)
+    }
+    defer resp.Body.Close()
+    if resp.StatusCode != 200 {
+        // read error as JSON/message
+        b, _ := io.ReadAll(resp.Body)
+        log.Fatalf("server error %d: %s", resp.StatusCode, strings.TrimSpace(string(b)))
+    }
 
-	resp, err := http.Get(u.String())
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer resp.Body.Close()
-	printDfsGet(resp)
+    if *out != "" {
+        outPath := *out
+        if !filepath.IsAbs(outPath) {
+            cwd, err := os.Getwd()
+            if err != nil {
+                log.Fatal(err)
+            }
+            outPath = filepath.Clean(filepath.Join(cwd, outPath))
+        }
+        f, err := os.Create(outPath)
+        if err != nil {
+            log.Fatal(err)
+        }
+        defer f.Close()
+        if _, err := io.Copy(f, resp.Body); err != nil {
+            log.Fatal(err)
+        }
+        return
+    }
+    // stream to stdout for piping
+    if _, err := io.Copy(os.Stdout, resp.Body); err != nil {
+        log.Fatal(err)
+    }
 }
 
 func bootstrapHTTP(args []string) {
@@ -406,9 +419,15 @@ func printBootstrap(resp *http.Response) {
 func printPins(resp *http.Response) {
     b, err := readAndCheck(resp)
     if err != nil { log.Fatal(err) }
-    var arr []string
+    type pinInfo struct{ CID, Name, Mime string }
+    var arr []pinInfo
     if json.Unmarshal(b, &arr) == nil {
-        for _, s := range arr { fmt.Println(s) }
+        tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+        fmt.Fprintln(tw, "CID\tNAME\tMIME")
+        for _, p := range arr {
+            fmt.Fprintf(tw, "%s\t%s\t%s\n", p.CID, p.Name, p.Mime)
+        }
+        _ = tw.Flush()
         return
     }
     fmt.Println(string(b))

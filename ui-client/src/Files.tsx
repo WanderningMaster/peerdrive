@@ -164,7 +164,7 @@ export default function FilesPage() {
         <button className="btn primary" onClick={onUpload} disabled={uploading}>
           {uploading ? "Uploading..." : "Upload"}
         </button>
-        
+
         <div style={{ display: "inline-flex", gap: 8, alignItems: "center", marginLeft: 12 }}>
           <input
             className="input"
@@ -186,7 +186,6 @@ export default function FilesPage() {
           <button className="btn" onClick={runGC} disabled={gcBusy || loading || uploading}>
             {gcBusy ? "GC..." : "GC"}
           </button>
-          {gcMessage && <span className="muted">{gcMessage}</span>}
         </div>
       </div>
 

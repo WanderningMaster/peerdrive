@@ -186,12 +186,6 @@ func (s *DiskStore) GetBlock(ctx context.Context, c block.CID) (*block.Block, er
 			if blk.Header.Type == block.BlockManifest {
 				_ = s.fetcher.Announce(ctx, blk.CID)
 			}
-			// Soft-pin freshly cached blocks to avoid GC during short-term reads
-			_ = s.PinSoft(ctx, blk.CID)
-			// Refresh soft pin TTL if present
-			if _, err := s.db.Get(softPinKey(c), nil); err == nil {
-				_ = s.db.Put(softPinKey(c), encodeExpiry(time.Now().Add(s.softTTL)), nil)
-			}
 		}
 		return blk, nil
 	}

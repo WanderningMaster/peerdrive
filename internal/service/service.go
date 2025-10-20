@@ -154,7 +154,7 @@ func (s *Service) AddFromPathDistributed(ctx context.Context, inPath string) (st
 }
 
 func (s *Service) Fetch(ctx context.Context, cid block.CID) ([]byte, error) {
-	return dag.Fetch(ctx, s.store, cid)
+	return dag.FetchParallel(ctx, s.store, cid, 16)
 }
 
 func (s *Service) Pin(ctx context.Context, cid block.CID) error   { return s.store.Pin(ctx, cid) }
@@ -175,17 +175,20 @@ func (s *Service) ListPins(ctx context.Context) ([]PinInfo, error) {
 	out := make([]PinInfo, 0, len(cids))
 	dec := util.Must(cbor.DecOptions{TimeTag: cbor.DecTagIgnored}.DecMode())
 	for _, c := range cids {
+		// Only include manifest pins for user-visible pins list
+		b, err := s.store.GetBlock(ctx, c)
+		if err != nil || b == nil || b.Header.Type != block.BlockManifest {
+			continue
+		}
 		var pi PinInfo
 		if enc, err := c.Encode(); err == nil {
 			pi.CID = enc
 		}
-		if b, err := s.store.GetBlock(ctx, c); err == nil && b != nil && b.Header.Type == block.BlockManifest {
-			var mp dag.ManifestPayload
-			if err := dec.Unmarshal(b.Payload, &mp); err == nil {
-				pi.Name = mp.Name
-				pi.Mime = mp.Mime
-				pi.Size = int(mp.Size)
-			}
+		var mp dag.ManifestPayload
+		if err := dec.Unmarshal(b.Payload, &mp); err == nil {
+			pi.Name = mp.Name
+			pi.Mime = mp.Mime
+			pi.Size = int(mp.Size)
 		}
 		out = append(out, pi)
 	}

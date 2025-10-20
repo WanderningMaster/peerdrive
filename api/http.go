@@ -121,6 +121,7 @@ func NewMux(svc *service.Service) *http.ServeMux {
 		var cidStr string
 		var err error
 		if compress {
+			fmt.Println("add with compress")
 			cidStr, err = svc.AddFromPathDistributed(r.Context(), inPath)
 		} else {
 			cidStr, err = svc.AddFromPath(r.Context(), inPath)

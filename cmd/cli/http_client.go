@@ -10,7 +10,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
-    "text/tabwriter"
+	"text/tabwriter"
 
 	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/routing"
@@ -77,13 +77,13 @@ func dfsPut(inPath string, compress bool) {
 	if err != nil {
 		log.Fatal(err)
 	}
-    u.Path = "/dfs/put"
-    q := u.Query()
-    q.Set("in", inPath)
-    if compress {
-        q.Set("compress", "1")
-    }
-    u.RawQuery = q.Encode()
+	u.Path = "/dfs/put"
+	q := u.Query()
+	q.Set("in", inPath)
+	if compress {
+		q.Set("compress", "1")
+	}
+	u.RawQuery = q.Encode()
 
 	resp, err := http.Post(u.String(), "application/json", nil)
 	if err != nil {
@@ -342,65 +342,76 @@ func printPins(resp *http.Response) {
 }
 
 func printClosest(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil {
-        log.Fatal(err)
-    }
-    var arr []routing.Contact
-    if json.Unmarshal(b, &arr) == nil {
-        tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
-        fmt.Fprintln(tw, "ID\tADDR\tRELAY")
-        for _, c := range arr {
-            fmt.Fprintf(tw, "%s\t%s\t%s\n", c.ID, c.Addr, c.Relay)
-        }
-        _ = tw.Flush()
-        return
-    }
-    fmt.Println(string(b))
+	b, err := readAndCheck(resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var arr []routing.Contact
+	if json.Unmarshal(b, &arr) == nil {
+		tw := tabwriter.NewWriter(os.Stdout, 0, 8, 2, ' ', 0)
+		fmt.Fprintln(tw, "ID\tADDR\tRELAY")
+		for _, c := range arr {
+			fmt.Fprintf(tw, "%s\t%s\t%s\n", c.ID, c.Addr, c.Relay)
+		}
+		_ = tw.Flush()
+		return
+	}
+	fmt.Println(string(b))
 }
 
 func gc() {
-    conf := configuration.LoadUserConfig()
-    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-    if err != nil {
-        log.Fatal(err)
-    }
-    u.Path = "/gc"
-    resp, err := http.Post(u.String(), "application/json", nil)
-    if err != nil {
-        log.Fatal(err)
-    }
-    defer resp.Body.Close()
-    printGC(resp)
+	conf := configuration.LoadUserConfig()
+	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
+	if err != nil {
+		log.Fatal(err)
+	}
+	u.Path = "/gc"
+	resp, err := http.Post(u.String(), "application/json", nil)
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	printGC(resp)
 }
 
 func printGC(resp *http.Response) {
-    b, err := readAndCheck(resp)
-    if err != nil {
-        log.Fatal(err)
-    }
-    var m struct{ Freed int `json:"freed"` }
-    if json.Unmarshal(b, &m) == nil {
-        fmt.Printf("freed %d blocks\n", m.Freed)
-        return
-    }
-    fmt.Println(string(b))
+	b, err := readAndCheck(resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var m struct {
+		Freed int `json:"freed"`
+	}
+	if json.Unmarshal(b, &m) == nil {
+		fmt.Printf("freed %d blocks\n", m.Freed)
+		return
+	}
+	fmt.Println(string(b))
 }
 
 func storeSize() {
-    conf := configuration.LoadUserConfig()
-    u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
-    if err != nil { log.Fatal(err) }
-    u.Path = "/store/size"
-    resp, err := http.Get(u.String())
-    if err != nil { log.Fatal(err) }
-    defer resp.Body.Close()
-    b, err := readAndCheck(resp)
-    if err != nil { log.Fatal(err) }
-    var m struct{ Blocks int `json:"blocks"`; Bytes int64 `json:"bytes"` }
-    if json.Unmarshal(b, &m) == nil {
-        fmt.Printf("blocks: %d\nbytes: %d\n", m.Blocks, m.Bytes)
-        return
-    }
-    fmt.Println(string(b))
+	conf := configuration.LoadUserConfig()
+	u, err := url.Parse(fmt.Sprintf("http://0.0.0.0:%d", conf.HttpPort))
+	if err != nil {
+		log.Fatal(err)
+	}
+	u.Path = "/store/size"
+	resp, err := http.Get(u.String())
+	if err != nil {
+		log.Fatal(err)
+	}
+	defer resp.Body.Close()
+	b, err := readAndCheck(resp)
+	if err != nil {
+		log.Fatal(err)
+	}
+	var m struct {
+		Blocks int   `json:"blocks"`
+		Bytes  int64 `json:"bytes"`
+	}
+	if json.Unmarshal(b, &m) == nil {
+		fmt.Printf("blocks: %d\nbytes: %d\n", m.Blocks, m.Bytes)
+		return
+	}
+	fmt.Println(string(b))
 }

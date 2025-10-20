@@ -5,6 +5,7 @@ use handlers::daemon::{
     stop_journal_stream, LogStreamState,
 };
 use handlers::peers::list_closest;
+use handlers::store::{store_size, gc_store};
 use handlers::pins::{add_and_pin_file, list_pins, pin_by_cid};
 use handlers::settings::{read_user_config, write_user_config};
 
@@ -37,7 +38,9 @@ pub fn run() {
             list_closest,
             list_pins,
             add_and_pin_file,
-            pin_by_cid
+            pin_by_cid,
+            store_size,
+            gc_store
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

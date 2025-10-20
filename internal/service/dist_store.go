@@ -82,23 +82,21 @@ func (s *distStore) PutBlock(ctx context.Context, b *block.Block) error {
 		}
 	}
 
-	if s.keepLocal(b) || successes == 0 {
-		if err := s.local.PutBlock(ctx, b); err != nil {
-			return err
-		}
-		type localPinner interface {
-			Pin(ctx context.Context, c block.CID) error
-		}
-		if p, ok := any(s.local).(localPinner); ok {
-			if err := p.Pin(ctx, b.CID); err != nil {
-				return err
-			}
-		} else {
-			return fmt.Errorf("local store does not support pinning")
-		}
-		return nil
-	}
-	return nil
+    if s.keepLocal(b) || successes == 0 {
+        if err := s.local.PutBlock(ctx, b); err != nil {
+            return err
+        }
+        type localPinnerDirect interface { PinDirect(ctx context.Context, c block.CID) error }
+        type localPinner interface { Pin(ctx context.Context, c block.CID) error }
+        // Prefer direct pins so GC doesn't retain full DAG
+        if p, ok := any(s.local).(localPinnerDirect); ok {
+            if err := p.PinDirect(ctx, b.CID); err != nil { return err }
+        } else if p, ok := any(s.local).(localPinner); ok {
+            if err := p.Pin(ctx, b.CID); err != nil { return err }
+        } else { return fmt.Errorf("local store does not support pinning") }
+        return nil
+    }
+    return nil
 }
 
 func (s *distStore) GetBlock(ctx context.Context, c block.CID) (*block.Block, error) {

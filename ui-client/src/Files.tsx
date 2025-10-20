@@ -13,8 +13,21 @@ export default function FilesPage() {
   const [previewName, setPreviewName] = useState<string>("");
   const [previewMime, setPreviewMime] = useState<string>("");
   const [uploading, setUploading] = useState(false);
+  // Upload mode is configured in Settings and stored in localStorage
+  function getUploadMode(): "standard" | "distributed" {
+    try {
+      const v = localStorage.getItem("uploadMode");
+      return v === "distributed" ? "distributed" : "standard";
+    } catch {
+      return "standard";
+    }
+  }
   const [cidInput, setCidInput] = useState("");
   const [pinning, setPinning] = useState(false);
+  const [storeBlocks, setStoreBlocks] = useState<number | null>(null);
+  const [storeBytes, setStoreBytes] = useState<number | null>(null);
+  const [gcBusy, setGcBusy] = useState(false);
+  const [gcMessage, setGcMessage] = useState("");
 
   function formatBytes(n?: number): string {
     if (typeof n !== "number" || !isFinite(n) || n < 0) return "—";
@@ -45,10 +58,35 @@ export default function FilesPage() {
         size: p?.size ? Number(p.size) : undefined
       })) : [];
       setPins(arr);
+      // Also refresh store stats
+      try {
+        const st = await invoke<any>("store_size");
+        const bl = Number(st?.blocks);
+        const by = Number(st?.bytes);
+        setStoreBlocks(Number.isFinite(bl) ? bl : null);
+        setStoreBytes(Number.isFinite(by) ? by : null);
+      } catch {
+        setStoreBlocks(null);
+        setStoreBytes(null);
+      }
     } catch (e: any) {
       setError(String(e));
     } finally {
       setLoading(false);
+    }
+  }
+
+  async function runGC() {
+    try {
+      setGcBusy(true);
+      setGcMessage("");
+      const freed = await invoke<number>("gc_store");
+      setGcMessage(`Freed ${freed} blocks`);
+      await loadPins();
+    } catch (e: any) {
+      setError(String(e));
+    } finally {
+      setGcBusy(false);
     }
   }
 
@@ -87,7 +125,8 @@ export default function FilesPage() {
       if (!selection) return; // cancelled
       const path = Array.isArray(selection) ? selection[0] : selection;
       if (typeof path !== "string" || path.trim() === "") return;
-      await invoke<string>("add_and_pin_file", { path });
+      const compress = getUploadMode() === "distributed";
+      await invoke<string>("add_and_pin_file", { path, compress });
       await loadPins();
     } catch (e: any) {
       setError(String(e));
@@ -125,6 +164,7 @@ export default function FilesPage() {
         <button className="btn primary" onClick={onUpload} disabled={uploading}>
           {uploading ? "Uploading..." : "Upload"}
         </button>
+        
         <div style={{ display: "inline-flex", gap: 8, alignItems: "center", marginLeft: 12 }}>
           <input
             className="input"
@@ -136,6 +176,17 @@ export default function FilesPage() {
           <button className="btn" onClick={openPreviewFromCid} disabled={!cidInput.trim()}>
             Preview CID
           </button>
+        </div>
+        <div style={{ marginLeft: "auto", display: "inline-flex", gap: 8, alignItems: "center" }}>
+          <span className="muted">Store:</span>
+          <span className="muted">
+            {storeBlocks == null ? "—" : storeBlocks.toLocaleString()} blocks
+          </span>
+          <span className="muted">/ {formatBytes(storeBytes ?? undefined)}</span>
+          <button className="btn" onClick={runGC} disabled={gcBusy || loading || uploading}>
+            {gcBusy ? "GC..." : "GC"}
+          </button>
+          {gcMessage && <span className="muted">{gcMessage}</span>}
         </div>
       </div>
 

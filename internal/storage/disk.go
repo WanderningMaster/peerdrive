@@ -186,6 +186,8 @@ func (s *DiskStore) GetBlock(ctx context.Context, c block.CID) (*block.Block, er
 			if blk.Header.Type == block.BlockManifest {
 				_ = s.fetcher.Announce(ctx, blk.CID)
 			}
+			// Soft-pin freshly cached blocks to avoid GC during short-term reads
+			_ = s.PinSoft(ctx, blk.CID)
 			// Refresh soft pin TTL if present
 			if _, err := s.db.Get(softPinKey(c), nil); err == nil {
 				_ = s.db.Put(softPinKey(c), encodeExpiry(time.Now().Add(s.softTTL)), nil)
@@ -235,7 +237,20 @@ func (s *DiskStore) Pin(ctx context.Context, c block.CID) error {
 	if err := s.db.Delete(softPinKey(c), nil); err != nil && err != leveldb.ErrNotFound {
 		return err
 	}
-	return s.db.Put(pinKey(c), []byte{}, nil)
+	// 'r' for recursive (default)
+	return s.db.Put(pinKey(c), []byte{'r'}, nil)
+}
+
+func (s *DiskStore) PinDirect(ctx context.Context, c block.CID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Hard pin: ensure soft pin is cleared
+	if err := s.db.Delete(softPinKey(c), nil); err != nil && err != leveldb.ErrNotFound {
+		return err
+	}
+	// 'd' for direct
+	return s.db.Put(pinKey(c), []byte{'d'}, nil)
 }
 
 func (s *DiskStore) PinSoft(ctx context.Context, c block.CID) error {
@@ -286,18 +301,35 @@ func (s *DiskStore) GC(ctx context.Context) (int, error) {
 	if err := ctx.Err(); err != nil {
 		return 0, err
 	}
-	pins, err := s.ListPins(ctx)
-	if err != nil {
-		return 0, err
+	// Split roots into recursive and direct
+	var recPins []block.CID
+	var dirPins []block.CID
+	itpHard := s.db.NewIterator(lutil.BytesPrefix([]byte{'p'}), nil)
+	for itpHard.Next() {
+		c, err := cidFromKey(itpHard.Key())
+		if err != nil {
+			continue
+		}
+		v := itpHard.Value()
+		mode := byte('r')
+		if len(v) > 0 {
+			mode = v[0]
+		}
+		if mode == 'd' {
+			dirPins = append(dirPins, c)
+		} else {
+			recPins = append(recPins, c)
+		}
 	}
-	// Add unexpired soft pins as roots as well
+	itpHard.Release()
+	// Add unexpired soft pins as direct roots as well
 	itp := s.db.NewIterator(lutil.BytesPrefix([]byte{'s'}), nil)
 	now := time.Now()
 	for itp.Next() {
 		exp := decodeExpiry(itp.Value())
 		if now.Before(exp) {
 			if c, err := cidFromKey(itp.Key()); err == nil {
-				pins = append(pins, c)
+				dirPins = append(dirPins, c)
 			}
 		}
 	}
@@ -328,9 +360,14 @@ func (s *DiskStore) GC(ctx context.Context) (int, error) {
 	}
 	it.Release()
 
-	live := make(map[block.CID]struct{}, len(pins)*4)
-	stack := make([]block.CID, 0, len(pins))
-	stack = append(stack, pins...)
+	live := make(map[block.CID]struct{}, (len(recPins)+len(dirPins))*4)
+	stack := make([]block.CID, 0, len(recPins))
+	// mark direct pins live but don't traverse from them
+	for _, c := range dirPins {
+		live[c] = struct{}{}
+	}
+	// traverse from recursive roots
+	stack = append(stack, recPins...)
 	for len(stack) > 0 {
 		if err := ctx.Err(); err != nil {
 			return 0, err

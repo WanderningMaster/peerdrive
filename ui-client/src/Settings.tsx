@@ -10,6 +10,7 @@ export default function SettingsPage() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [message, setMessage] = useState<string>("");
+  const [uploadMode, setUploadMode] = useState<"standard" | "distributed">("standard");
 
   const nodeIdHex = useMemo(() => {
     return bytesToHex(nodeId);
@@ -26,6 +27,11 @@ export default function SettingsPage() {
         setTcpPort(cfg?.tcpPort ? String(cfg.tcpPort) : "");
         setHttpPort(cfg?.httpPort ? String(cfg.httpPort) : "");
         setRelay(cfg?.relay || "");
+        // Load UI-only upload mode from localStorage
+        try {
+          const v = localStorage.getItem("uploadMode");
+          setUploadMode(v === "distributed" ? "distributed" : "standard");
+        } catch {}
       } catch (e: any) {
         setMessage(String(e));
       } finally {
@@ -36,6 +42,13 @@ export default function SettingsPage() {
       mounted = false;
     };
   }, []);
+
+  function onUploadModeChange(val: "standard" | "distributed") {
+    setUploadMode(val);
+    try {
+      localStorage.setItem("uploadMode", val);
+    } catch {}
+  }
 
   async function save() {
     setMessage("");
@@ -113,6 +126,36 @@ export default function SettingsPage() {
             <button className="btn primary" type="button" disabled={saving || loading} onClick={save}>
               {saving ? "Saving..." : "Save"}
             </button>
+          </div>
+        </form>
+      </div>
+
+      <div className="card" style={{ marginTop: 16 }}>
+        <form className="form">
+          <div className="field">
+            <label>Upload Mode</label>
+            <div style={{ display: "flex", gap: 16, alignItems: "center" }}>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="radio"
+                  name="uploadMode"
+                  value="standard"
+                  checked={uploadMode === "standard"}
+                  onChange={() => onUploadModeChange("standard")}
+                />
+                Store locally
+              </label>
+              <label style={{ display: "inline-flex", alignItems: "center", gap: 6 }}>
+                <input
+                  type="radio"
+                  name="uploadMode"
+                  value="distributed"
+                  checked={uploadMode === "distributed"}
+                  onChange={() => onUploadModeChange("distributed")}
+                />
+                Distribute/pack
+              </label>
+            </div>
           </div>
         </form>
       </div>

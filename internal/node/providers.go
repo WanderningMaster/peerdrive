@@ -43,15 +43,7 @@ func (ps *Node) PutProviderRecord(ctx context.Context, cid block.CID) error {
 func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) ([]ProviderRecord, error) {
 	cidStr, _ := cid.Encode()
 
-	var bb [][]byte
-	b, err := ps.Get(ctx, cidStr)
-	if err != nil {
-		bb, err = ps.GetClosest(ctx, cidStr)
-		if err != nil {
-			return nil, fmt.Errorf("unknown cid: %w", err)
-		}
-	}
-	bb = append(bb, b)
+	bb, err := ps.GetClosest(ctx, cidStr)
 	if err != nil {
 		return nil, fmt.Errorf("unknown cid: %w", err)
 	}
@@ -64,6 +56,7 @@ func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) ([]Provide
 			continue
 		}
 
+		fmt.Println(string(mp.Addr))
 		mps = append(mps, mp)
 	}
 

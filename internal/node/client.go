@@ -107,7 +107,7 @@ func (n *Node) Get(ctx context.Context, key string) ([]byte, error) {
 	// Ask peers
 	visited := make(map[string]bool)
 	target := id.HashKey(key)
-	cands := n.rt.Closest(target, n.conf.Alpha)
+	cands := n.rt.Closest(target, n.conf.KBucketK)
 	for len(cands) > 0 {
 		next := cands
 		if len(next) > n.conf.Alpha {
@@ -180,7 +180,7 @@ func (n *Node) GetClosest(ctx context.Context, key string) ([][]byte, error) {
 			next = next[:n.conf.Alpha]
 		}
 		var mu sync.Mutex
-		var found []byte
+		var batchFounds [][]byte
 		var wg sync.WaitGroup
 		for _, peer := range next {
 			if visited[peer.Addr] {
@@ -199,9 +199,7 @@ func (n *Node) GetClosest(ctx context.Context, key string) ([][]byte, error) {
 				n.onRpcSuccess(m.From)
 				if m.Found {
 					mu.Lock()
-					if found == nil {
-						found = append([]byte(nil), m.Value...)
-					}
+					batchFounds = append(batchFounds, append([]byte(nil), m.Value...))
 					mu.Unlock()
 					return
 				}
@@ -211,12 +209,12 @@ func (n *Node) GetClosest(ctx context.Context, key string) ([][]byte, error) {
 			}(peer)
 		}
 		wg.Wait()
-		if found != nil {
+		if len(batchFounds) > 0 {
 			n.storeMu.Lock()
-			n.store[key] = kvRecord{Value: append([]byte(nil), found...), Expires: time.Now().Add(n.conf.RecordTTL), Origin: false}
+			n.store[key] = kvRecord{Value: append([]byte(nil), batchFounds[0]...), Expires: time.Now().Add(n.conf.RecordTTL), Origin: false}
 			n.storeMu.Unlock()
 
-			founds = append(founds, found)
+			founds = append(founds, batchFounds...)
 		}
 		cands = uniqAndSortByDist(cands, target, visited)
 		if len(cands) > n.conf.KBucketK {

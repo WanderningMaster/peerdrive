@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import { listen, UnlistenFn } from "@tauri-apps/api/event";
 
@@ -9,7 +9,6 @@ export default function DaemonPage() {
   const [busy, setBusy] = useState(false);
   const [streaming, setStreaming] = useState(false);
   const [logs, setLogs] = useState<string[]>([]);
-  const [message, setMessage] = useState<string>("");
   const [flags, setFlags] = useState("");
   const [flagsSaving, setFlagsSaving] = useState(false);
   const [flagsLoading, setFlagsLoading] = useState(false);
@@ -51,9 +50,7 @@ export default function DaemonPage() {
     try {
       const s = await invoke<string>("service_status", { name: SERVICE });
       setStatus(s);
-      setMessage("");
     } catch (e: any) {
-      setMessage(String(e));
     }
   }
 
@@ -64,7 +61,6 @@ export default function DaemonPage() {
       console.log(f)
       setFlags(f || "");
     } catch (e: any) {
-      setMessage(String(e));
     } finally {
       setFlagsLoading(false);
     }
@@ -100,7 +96,6 @@ export default function DaemonPage() {
       // follow activation until it settles
       void pollStatusUntilSettled();
     } catch (e: any) {
-      setMessage(String(e));
     } finally {
       setBusy(false);
     }
@@ -109,7 +104,6 @@ export default function DaemonPage() {
   async function startLogs() {
     if (streaming) return;
     try {
-      setMessage("");
       setLogs([]);
       await invoke("start_journal_stream", { name: SERVICE });
       const unlisten = await listen("daemon://logs", (ev: any) => {
@@ -122,7 +116,6 @@ export default function DaemonPage() {
       unlistenRef.current = unlisten;
       setStreaming(true);
     } catch (e: any) {
-      setMessage(String(e));
     }
   }
 
@@ -147,7 +140,6 @@ export default function DaemonPage() {
       await checkStatus();
       void pollStatusUntilSettled();
     } catch (e: any) {
-      setMessage(String(e));
     } finally {
       setBusy(false);
     }
@@ -157,10 +149,8 @@ export default function DaemonPage() {
     try {
       setFlagsSaving(true);
       await invoke("write_startup_flags", { name: SERVICE, flags });
-      setMessage("Flags saved. Daemon reload done; restart to apply.");
     } catch (e: any) {
       console.log(e)
-      setMessage(String(e));
     } finally {
       setFlagsSaving(false);
     }

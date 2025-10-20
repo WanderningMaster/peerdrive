@@ -211,6 +211,22 @@ func NewMux(svc *service.Service) *http.ServeMux {
 		writeJSON(w, map[string]any{"ok": true, "peers": peers})
 	})
 
+	// Manually trigger blockstore garbage collection
+	mux.HandleFunc("/gc", func(w http.ResponseWriter, r *http.Request) {
+		// Mutating action; prefer POST
+		if r.Method != http.MethodPost {
+			w.Header().Set("Allow", http.MethodPost)
+			writeErr(w, http.StatusMethodNotAllowed, "method not allowed; use POST")
+			return
+		}
+		freed, err := svc.GC(r.Context())
+		if err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, map[string]any{"freed": freed})
+	})
+
 	return mux
 }
 

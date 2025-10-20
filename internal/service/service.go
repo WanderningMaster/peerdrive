@@ -164,6 +164,8 @@ func (s *Service) Closest(target id.NodeID, k int) []routing.Contact {
 
 func (s *Service) Bootstrap(ctx context.Context, peers []string) { s.n.Bootstrap(ctx, peers) }
 
+func (s *Service) GC(ctx context.Context) (int, error) { return s.store.GC(ctx) }
+
 func (s *Service) StartNode(ctx context.Context) {
 	ctx = logging.WithPrefix(ctx, logging.ServerPrefix)
 

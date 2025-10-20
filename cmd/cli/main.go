@@ -171,6 +171,16 @@ func main() {
 	cmdClosest.Flags().IntVarP(&closestK, "k", "k", 0, "number of contacts to return (defaults to server conf)")
 	root.AddCommand(cmdClosest)
 
+	cmdGC := &cobra.Command{
+		Use:   "gc",
+		Short: "Run blockstore garbage collection",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			gc()
+			return nil
+		},
+	}
+	root.AddCommand(cmdGC)
+
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

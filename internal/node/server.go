@@ -153,8 +153,7 @@ func handleRequest(ctx context.Context, n *Node, m rpc.RpcMessage) (rpc.RpcMessa
 		if err := n.blockProv.PutBlock(ctx, blk); err != nil {
 			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
 		}
-		// Non-optional pin to prevent data-loss on the accepting node
-		if err := n.blockProv.Pin(ctx, blk.CID); err != nil {
+		if err := n.blockProv.PinSoft(ctx, blk.CID); err != nil {
 			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
 		}
 		return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: true}, "key=" + m.Key

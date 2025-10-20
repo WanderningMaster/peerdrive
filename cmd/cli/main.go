@@ -183,6 +183,16 @@ func main() {
 	}
 	root.AddCommand(cmdGC)
 
+	cmdSize := &cobra.Command{
+		Use:   "size",
+		Short: "Show current blockstore size",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			storeSize()
+			return nil
+		},
+	}
+	root.AddCommand(cmdSize)
+
 	if err := root.Execute(); err != nil {
 		fmt.Fprintln(os.Stderr, err)
 		os.Exit(1)

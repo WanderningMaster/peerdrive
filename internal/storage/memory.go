@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"sync"
+	"time"
 
 	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/dag"
@@ -14,10 +15,12 @@ var (
 )
 
 type MemStore struct {
-	mu      sync.RWMutex
-	store   map[block.CID][]byte
-	pins    map[block.CID]struct{}
-	fetcher BlockFetcher
+	mu       sync.RWMutex
+	store    map[block.CID][]byte
+	hardPins map[block.CID]struct{}
+	softPins map[block.CID]time.Time // expiry time
+	fetcher  BlockFetcher
+	softTTL  time.Duration
 }
 
 func WithFetcher(fetcher BlockFetcher) func(*MemStore) {
@@ -26,13 +29,21 @@ func WithFetcher(fetcher BlockFetcher) func(*MemStore) {
 	}
 }
 
+func WithSoftTTL(ttl time.Duration) func(*MemStore) {
+	return func(s *MemStore) { s.softTTL = ttl }
+}
+
 func NewMemStore(options ...func(*MemStore)) *MemStore {
 	m := &MemStore{
-		store: make(map[block.CID][]byte),
-		pins:  make(map[block.CID]struct{}),
+		store:    make(map[block.CID][]byte),
+		hardPins: make(map[block.CID]struct{}),
+		softPins: make(map[block.CID]time.Time),
 	}
 	for _, o := range options {
 		o(m)
+	}
+	if m.softTTL <= 0 {
+		m.softTTL = 6 * time.Hour
 	}
 
 	return m
@@ -102,6 +113,12 @@ func (s *MemStore) GetBlock(ctx context.Context, c block.CID) (*block.Block, err
 			if blk.Header.Type == block.BlockManifest {
 				s.fetcher.Announce(ctx, blk.CID)
 			}
+			// Refresh soft pin TTL if present
+			s.mu.Lock()
+			if _, ok := s.softPins[c]; ok {
+				s.softPins[c] = time.Now().Add(s.softTTL)
+			}
+			s.mu.Unlock()
 		}
 		return blk, nil
 	}
@@ -126,6 +143,12 @@ func (s *MemStore) GetBlockLocal(ctx context.Context, c block.CID) (*block.Block
 		if blk.CID != c {
 			return nil, errors.New("stored bytes CID mismatch")
 		}
+		// Refresh soft pin TTL if present
+		s.mu.Lock()
+		if _, ok := s.softPins[c]; ok {
+			s.softPins[c] = time.Now().Add(s.softTTL)
+		}
+		s.mu.Unlock()
 		return blk, nil
 	}
 
@@ -137,7 +160,21 @@ func (s *MemStore) Pin(ctx context.Context, c block.CID) error {
 		return err
 	}
 	s.mu.Lock()
-	s.pins[c] = struct{}{}
+	s.hardPins[c] = struct{}{}
+	// promote to hard pin: remove any soft pin
+	delete(s.softPins, c)
+	s.mu.Unlock()
+	return nil
+}
+
+func (s *MemStore) PinSoft(ctx context.Context, c block.CID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	if _, hard := s.hardPins[c]; !hard {
+		s.softPins[c] = time.Now().Add(s.softTTL)
+	}
 	s.mu.Unlock()
 	return nil
 }
@@ -147,7 +184,8 @@ func (s *MemStore) Unpin(ctx context.Context, c block.CID) error {
 		return err
 	}
 	s.mu.Lock()
-	delete(s.pins, c)
+	delete(s.hardPins, c)
+	delete(s.softPins, c)
 	s.mu.Unlock()
 	return nil
 }
@@ -158,8 +196,8 @@ func (s *MemStore) ListPins(ctx context.Context) ([]block.CID, error) {
 	}
 	s.mu.RLock()
 	defer s.mu.RUnlock()
-	out := make([]block.CID, 0, len(s.pins))
-	for c := range s.pins {
+	out := make([]block.CID, 0, len(s.hardPins))
+	for c := range s.hardPins {
 		out = append(out, c)
 	}
 	return out, nil
@@ -171,9 +209,15 @@ func (s *MemStore) GC(ctx context.Context) (int, error) {
 	}
 
 	s.mu.RLock()
-	pinsSnap := make([]block.CID, 0, len(s.pins))
-	for c := range s.pins {
+	pinsSnap := make([]block.CID, 0, len(s.hardPins)+len(s.softPins))
+	for c := range s.hardPins {
 		pinsSnap = append(pinsSnap, c)
+	}
+	now := time.Now()
+	for c, exp := range s.softPins {
+		if now.Before(exp) {
+			pinsSnap = append(pinsSnap, c)
+		}
 	}
 	keysSnap := make([]block.CID, 0, len(s.store))
 	for c := range s.store {
@@ -234,4 +278,17 @@ func (s *MemStore) GC(ctx context.Context) (int, error) {
 	s.mu.Unlock()
 
 	return freed, nil
+}
+
+func (s *MemStore) Stats(ctx context.Context) (int, int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, 0, err
+	}
+	s.mu.RLock()
+	defer s.mu.RUnlock()
+	var total int64
+	for _, raw := range s.store {
+		total += int64(len(raw))
+	}
+	return len(s.store), total, nil
 }

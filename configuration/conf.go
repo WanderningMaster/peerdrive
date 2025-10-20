@@ -13,16 +13,18 @@ type Config struct {
 	// Maintenance/GC
 	BucketRefresh      time.Duration
 	RecordTTL          time.Duration
-	RepublishInterval  time.Duration
-	GCInterval         time.Duration
-	RevalidateInterval time.Duration
-	// Limits and health
-	MaxValueSize     int
-	FailureThreshold int
+    RepublishInterval  time.Duration
+    GCInterval         time.Duration
+    RevalidateInterval time.Duration
+    // Limits and health
+    MaxValueSize     int
+    FailureThreshold int
+    // Soft pins
+    SoftPinTTL time.Duration
 }
 
 func Default() Config {
-	return Config{
+    return Config{
 		IdBits:             256,
 		KBucketK:           20,
 		Alpha:              5,
@@ -32,8 +34,9 @@ func Default() Config {
 		RecordTTL:          24 * time.Hour,
 		RepublishInterval:  12 * time.Hour,
 		GCInterval:         1 * time.Minute,
-		RevalidateInterval: 10 * time.Minute,
-		MaxValueSize:       1 << 20, // 1 MiB
-		FailureThreshold:   3,
-	}
+        RevalidateInterval: 10 * time.Minute,
+        MaxValueSize:       1 << 20, // 1 MiB
+        FailureThreshold:   3,
+        SoftPinTTL:         6 * time.Hour,
+    }
 }

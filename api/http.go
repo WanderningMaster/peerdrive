@@ -239,6 +239,16 @@ func NewMux(svc *service.Service) *http.ServeMux {
 		writeJSON(w, map[string]any{"freed": freed})
 	})
 
+	// Report blockstore size statistics
+	mux.HandleFunc("/store/size", func(w http.ResponseWriter, r *http.Request) {
+		blocks, bytes, err := svc.StoreStats(r.Context())
+		if err != nil {
+			writeErr(w, 500, err.Error())
+			return
+		}
+		writeJSON(w, map[string]any{"blocks": blocks, "bytes": bytes})
+	})
+
 	return mux
 }
 

@@ -46,6 +46,8 @@ type BlockProvider interface {
     GetBlockLocal(ctx context.Context, c block.CID) (*block.Block, error)
     PutBlock(ctx context.Context, b *block.Block) error
     Pin(ctx context.Context, c block.CID) error
+    PinSoft(ctx context.Context, c block.CID) error
+    Unpin(ctx context.Context, c block.CID) error
 }
 
 type kvRecord struct {

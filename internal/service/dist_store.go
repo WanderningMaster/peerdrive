@@ -11,8 +11,6 @@ import (
 	"github.com/WanderningMaster/peerdrive/internal/routing"
 )
 
-// distStore implements dag.BlockPutGetter. It distributes PutBlock writes
-// to remote peers and optionally stores certain blocks locally (e.g., manifests).
 type distStore struct {
 	n         NodePutter
 	local     dag.BlockPutGetter
@@ -20,7 +18,6 @@ type distStore struct {
 	keepLocal func(*block.Block) bool
 }
 
-// NodePutter captures the subset of node methods used by distStore.
 type NodePutter interface {
 	IterativeFindNode(ctx context.Context, target id.NodeID, want int) []routing.Contact
 	PutBlock(ctx context.Context, c routing.Contact, b *block.Block) error
@@ -52,28 +49,39 @@ func (s *distStore) PutBlock(ctx context.Context, b *block.Block) error {
 		}
 	}
 
-	// Choose peers by Kademlia distance to the CID.
 	key, err := b.CID.Encode()
 	if err != nil {
 		return err
 	}
 	target := id.HashKey(key)
 	cands := s.n.IterativeFindNode(ctx, target, s.n.KBucketK())
-	// send to up to replicas peers and count successful stores
-	successes := 0
-	for _, peer := range cands {
-		if successes >= s.replicas {
-			break
-		}
-		if err := s.n.PutBlock(ctx, peer, b); err == nil {
-			successes++
-		} else {
-			fmt.Println("FAILED TO STORE BLOCK REMOTELY", err)
+
+	var selfId id.NodeID
+	if me, ok := any(s.n).(interface{ Contact() routing.Contact }); ok {
+		selfId = me.Contact().ID
+	}
+
+	foreign := 0
+	for _, c := range cands {
+		if c.ID.String() != selfId.String() {
+			foreign += 1
 		}
 	}
 
-	// Always keep selected blocks locally (e.g., manifest),
-	// and also fall back to local store if no remote accepted the block
+	successes := 0
+	for _, peer := range cands {
+		if peer.ID == selfId {
+			continue
+		}
+		if successes >= s.replicas {
+			break
+		}
+
+		if err := s.n.PutBlock(ctx, peer, b); err == nil {
+			successes++
+		}
+	}
+
 	if s.keepLocal(b) || successes == 0 {
 		if err := s.local.PutBlock(ctx, b); err != nil {
 			return err
@@ -107,13 +115,12 @@ func KeepLocalSelector(manifestAlways bool, fraction float64) func(*block.Block)
 		return func(b *block.Block) bool { return true }
 	}
 	// Precompute threshold for uint64 range
-	max := ^uint64(0)
+	max := uint64(0)
 	threshold := uint64(float64(max) * fraction)
 	return func(b *block.Block) bool {
 		if manifestAlways && b.Header.Type == block.BlockManifest {
 			return true
 		}
-		// Deterministic sampling using the first 8 bytes of CID digest
 		v := binary.BigEndian.Uint64(b.CID.Digest[:8])
 		return v <= threshold
 	}

@@ -6,6 +6,7 @@ import (
 	"os"
 	"path/filepath"
 	"sync"
+	"time"
 
 	"github.com/WanderningMaster/peerdrive/internal/block"
 	"github.com/WanderningMaster/peerdrive/internal/dag"
@@ -18,10 +19,15 @@ type DiskStore struct {
 	baseDir string
 	mu      sync.RWMutex
 	fetcher BlockFetcher
+	softTTL time.Duration
 }
 
 func DiskWithFetcher(fetcher BlockFetcher) func(*DiskStore) {
 	return func(s *DiskStore) { s.fetcher = fetcher }
+}
+
+func DiskWithSoftTTL(ttl time.Duration) func(*DiskStore) {
+	return func(s *DiskStore) { s.softTTL = ttl }
 }
 
 func NewDiskStore(baseDir string, options ...func(*DiskStore)) (*DiskStore, error) {
@@ -36,6 +42,9 @@ func NewDiskStore(baseDir string, options ...func(*DiskStore)) (*DiskStore, erro
 	s := &DiskStore{db: db, baseDir: baseDir}
 	for _, o := range options {
 		o(s)
+	}
+	if s.softTTL <= 0 {
+		s.softTTL = 6 * time.Hour
 	}
 	return s, nil
 }
@@ -58,6 +67,36 @@ func pinKey(c block.CID) []byte {
 	b[0] = 'p'
 	copy(b[1:], cidb)
 	return b
+}
+
+func softPinKey(c block.CID) []byte {
+	cidb := c.ToBytes()
+	b := make([]byte, 1+len(cidb))
+	b[0] = 's'
+	copy(b[1:], cidb)
+	return b
+}
+
+func encodeExpiry(t time.Time) []byte {
+	// store as big-endian int64 seconds
+	b := make([]byte, 8)
+	sec := t.Unix()
+	for i := 7; i >= 0; i-- {
+		b[i] = byte(sec & 0xff)
+		sec >>= 8
+	}
+	return b
+}
+
+func decodeExpiry(b []byte) time.Time {
+	if len(b) < 8 {
+		return time.Unix(0, 0)
+	}
+	var sec int64
+	for i := 0; i < 8; i++ {
+		sec = (sec << 8) | int64(b[i])
+	}
+	return time.Unix(sec, 0)
 }
 
 func cidFromKey(k []byte) (block.CID, error) {
@@ -147,6 +186,10 @@ func (s *DiskStore) GetBlock(ctx context.Context, c block.CID) (*block.Block, er
 			if blk.Header.Type == block.BlockManifest {
 				_ = s.fetcher.Announce(ctx, blk.CID)
 			}
+			// Refresh soft pin TTL if present
+			if _, err := s.db.Get(softPinKey(c), nil); err == nil {
+				_ = s.db.Put(softPinKey(c), encodeExpiry(time.Now().Add(s.softTTL)), nil)
+			}
 		}
 		return blk, nil
 	}
@@ -176,6 +219,11 @@ func (s *DiskStore) GetBlockLocal(ctx context.Context, c block.CID) (*block.Bloc
 	if blk.CID != c {
 		return nil, errors.New("stored bytes CID mismatch")
 	}
+	// Refresh soft pin TTL if present
+	if v, err2 := s.db.Get(softPinKey(c), nil); err2 == nil {
+		_ = s.db.Put(softPinKey(c), encodeExpiry(time.Now().Add(s.softTTL)), nil)
+		_ = v // silence unused in case of build tags
+	}
 	return blk, nil
 }
 
@@ -183,13 +231,30 @@ func (s *DiskStore) Pin(ctx context.Context, c block.CID) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// Hard pin: ensure soft pin is cleared
+	if err := s.db.Delete(softPinKey(c), nil); err != nil && err != leveldb.ErrNotFound {
+		return err
+	}
 	return s.db.Put(pinKey(c), []byte{}, nil)
+}
+
+func (s *DiskStore) PinSoft(ctx context.Context, c block.CID) error {
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	// Only create soft pin if no hard pin exists
+	if _, err := s.db.Get(pinKey(c), nil); err == nil {
+		return nil
+	}
+	return s.db.Put(softPinKey(c), encodeExpiry(time.Now().Add(s.softTTL)), nil)
 }
 
 func (s *DiskStore) Unpin(ctx context.Context, c block.CID) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
+	// Remove both hard and soft pins
+	_ = s.db.Delete(softPinKey(c), nil)
 	return s.db.Delete(pinKey(c), nil)
 }
 
@@ -197,6 +262,7 @@ func (s *DiskStore) ListPins(ctx context.Context) ([]block.CID, error) {
 	if err := ctx.Err(); err != nil {
 		return nil, err
 	}
+	// Only list hard pins
 	it := s.db.NewIterator(lutil.BytesPrefix([]byte{'p'}), nil)
 	defer it.Release()
 	out := make([]block.CID, 0, 128)
@@ -224,6 +290,18 @@ func (s *DiskStore) GC(ctx context.Context) (int, error) {
 	if err != nil {
 		return 0, err
 	}
+	// Add unexpired soft pins as roots as well
+	itp := s.db.NewIterator(lutil.BytesPrefix([]byte{'s'}), nil)
+	now := time.Now()
+	for itp.Next() {
+		exp := decodeExpiry(itp.Value())
+		if now.Before(exp) {
+			if c, err := cidFromKey(itp.Key()); err == nil {
+				pins = append(pins, c)
+			}
+		}
+	}
+	itp.Release()
 
 	type rec struct {
 		cid block.CID
@@ -293,4 +371,29 @@ func (s *DiskStore) GC(ctx context.Context) (int, error) {
 		}
 	}
 	return freed, nil
+}
+
+func (s *DiskStore) Stats(ctx context.Context) (int, int64, error) {
+	if err := ctx.Err(); err != nil {
+		return 0, 0, err
+	}
+	it := s.db.NewIterator(lutil.BytesPrefix([]byte{'b'}), nil)
+	defer it.Release()
+	var blocks int
+	var bytes int64
+	for it.Next() {
+		if err := ctx.Err(); err != nil {
+			return 0, 0, err
+		}
+		rel := string(it.Value())
+		abs := filepath.Join(s.baseDir, rel)
+		if fi, err := os.Stat(abs); err == nil {
+			bytes += fi.Size()
+		}
+		blocks++
+	}
+	if err := it.Error(); err != nil {
+		return 0, 0, err
+	}
+	return blocks, bytes, nil
 }

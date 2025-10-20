@@ -40,20 +40,34 @@ func (ps *Node) PutProviderRecord(ctx context.Context, cid block.CID) error {
 	return nil
 }
 
-func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) (*ProviderRecord, error) {
+func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) ([]ProviderRecord, error) {
 	cidStr, _ := cid.Encode()
+
+	var bb [][]byte
 	b, err := ps.Get(ctx, cidStr)
+	if err != nil {
+		bb, err = ps.GetClosest(ctx, cidStr)
+		if err != nil {
+			return nil, fmt.Errorf("unknown cid: %w", err)
+		}
+	}
+	bb = append(bb, b)
 	if err != nil {
 		return nil, fmt.Errorf("unknown cid: %w", err)
 	}
 
-	var mp ProviderRecord
+	var mps []ProviderRecord
 	dec := util.Must(cbor.DecOptions{TimeTag: cbor.DecTagIgnored}.DecMode())
-	if err := dec.Unmarshal(b, &mp); err != nil {
-		return nil, fmt.Errorf("provider record decode: %w", err)
+	for _, b := range bb {
+		var mp ProviderRecord
+		if err := dec.Unmarshal(b, &mp); err != nil {
+			continue
+		}
+
+		mps = append(mps, mp)
 	}
 
-	return &mp, nil
+	return mps, nil
 }
 
 // DeleteProviderRecord removes the local provider record for the given CID.

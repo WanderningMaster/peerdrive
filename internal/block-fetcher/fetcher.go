@@ -20,10 +20,25 @@ func New(node *node.Node) *Fetcher {
 }
 
 func (f *Fetcher) FetchBlock(ctx context.Context, cid block.CID) ([]byte, error) {
-	pr, err := f.node.GetProviderRecord(ctx, cid)
+	prs, err := f.node.GetProviderRecord(ctx, cid)
 	if err != nil {
 		return nil, err
 	}
+
+	for _, pr := range prs {
+		b, _err := f._fetchBlock(ctx, pr, cid)
+		err = _err
+		if err != nil {
+			continue
+		}
+
+		return b, nil
+	}
+
+	return nil, err
+}
+
+func (f *Fetcher) _fetchBlock(ctx context.Context, pr node.ProviderRecord, cid block.CID) ([]byte, error) {
 	c := routing.Contact{Addr: string(pr.Addr)}
 	if len(pr.Relay) != 0 {
 		c.Relay = string(pr.Relay)

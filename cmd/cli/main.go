@@ -82,15 +82,17 @@ func main() {
 	root.AddCommand(cmdKV)
 
 	var addIn string
+	var addCompress bool
 	cmdAdd := &cobra.Command{
 		Use:   "add",
 		Short: "Add file to DFS; prints CID",
 		RunE: func(cmd *cobra.Command, args []string) error {
-			dfsPut(addIn)
+			dfsPut(addIn, addCompress)
 			return nil
 		},
 	}
 	cmdAdd.Flags().StringVarP(&addIn, "in", "i", "", "input file path to add to DFS")
+	cmdAdd.Flags().BoolVar(&addCompress, "compress", false, "distribute blocks across peers")
 	_ = cmdAdd.MarkFlagRequired("in")
 	root.AddCommand(cmdAdd)
 

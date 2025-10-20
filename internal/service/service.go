@@ -1,20 +1,20 @@
 package service
 
 import (
-	"bytes"
-	"context"
-	"errors"
-	"fmt"
-	"io"
-	"log"
-	"mime"
-	"net"
-	nethttp "net/http"
-	"os"
-	"path/filepath"
-	"strconv"
-	"strings"
-	"time"
+    "bytes"
+    "context"
+    "errors"
+    "fmt"
+    "io"
+    "log"
+    "mime"
+    "net"
+    nethttp "net/http"
+    "os"
+    "path/filepath"
+    "strconv"
+    "strings"
+    "time"
 
 	"github.com/WanderningMaster/peerdrive/configuration"
 	"github.com/WanderningMaster/peerdrive/internal/block"
@@ -38,14 +38,16 @@ type Service struct {
 }
 
 func New(n *node.Node, conf *configuration.UserConfig, useMemStore bool) *Service {
-	fetcher := blockfetcher.New(n)
-	var blockstore storage.Store
+    fetcher := blockfetcher.New(n)
+    var blockstore storage.Store
 	if useMemStore {
 		blockstore = storage.NewMemStore(storage.WithFetcher(fetcher))
 	} else {
 		blockstore, _ = storage.NewDiskStore(conf.BlockstorePath, storage.DiskWithFetcher(fetcher))
 	}
-	n.SetBlockProvider(blockstore)
+    n.SetBlockProvider(blockstore)
+    // apply foreign block acceptance policy from user config
+    n.SetAcceptForeignBlocks(conf.AcceptForeignBlocks)
 
 	builder := dag.DagBuilder{
 		ChunkSize: 1 << 20,
@@ -101,6 +103,50 @@ func (s *Service) AddFromPath(ctx context.Context, inPath string) (string, error
 		return "", err
 	}
 	return cid.Encode()
+}
+
+// AddFromPathDistributed builds a DAG and distributes blocks across peers
+// instead of storing everything locally. By default keeps only the manifest locally.
+func (s *Service) AddFromPathDistributed(ctx context.Context, inPath string) (string, error) {
+    name := filepath.Base(inPath)
+    if strings.TrimSpace(name) == "" || name == "." || name == string(filepath.Separator) {
+        name = "file"
+    }
+
+    f, err := os.Open(inPath)
+    if err != nil {
+        return "", err
+    }
+    defer f.Close()
+
+    header := make([]byte, 512)
+    n, _ := io.ReadFull(f, header)
+    header = header[:n]
+    ctype := nethttp.DetectContentType(header)
+    if ctype == "application/octet-stream" {
+        if ext := strings.ToLower(filepath.Ext(name)); ext != "" {
+            if t := mime.TypeByExtension(ext); t != "" {
+                ctype = t
+            }
+        }
+    }
+
+    r := io.MultiReader(bytes.NewReader(header), f)
+
+    // Build a temporary builder that uses a distributed store wrapper
+    ds := NewDistStore(s.n, s.store, s.n.Replicas(), func(b *block.Block) bool { return b.Header.Type == block.BlockManifest })
+    builder := dag.DagBuilder{
+        ChunkSize: s.builder.ChunkSize,
+        Fanout:    s.builder.Fanout,
+        Codec:     s.builder.Codec,
+        Store:     ds,
+    }
+
+    _, cid, err := builder.BuildFromReader(ctx, name, ctype, r)
+    if err != nil {
+        return "", err
+    }
+    return cid.Encode()
 }
 
 func (s *Service) Fetch(ctx context.Context, cid block.CID) ([]byte, error) {

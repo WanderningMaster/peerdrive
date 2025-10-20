@@ -112,7 +112,19 @@ func NewMux(svc *service.Service) *http.ServeMux {
 			writeErr(w, 400, "in required")
 			return
 		}
-		cidStr, err := svc.AddFromPath(r.Context(), inPath)
+		compress := false
+		if v := strings.TrimSpace(r.URL.Query().Get("compress")); v != "" {
+			if v == "1" || strings.EqualFold(v, "true") || strings.EqualFold(v, "yes") || strings.EqualFold(v, "on") {
+				compress = true
+			}
+		}
+		var cidStr string
+		var err error
+		if compress {
+			cidStr, err = svc.AddFromPathDistributed(r.Context(), inPath)
+		} else {
+			cidStr, err = svc.AddFromPath(r.Context(), inPath)
+		}
 		if err != nil {
 			writeErr(w, 500, err.Error())
 			return

@@ -61,13 +61,13 @@ func (n *Node) handleConn(ctx context.Context, c net.Conn) {
 
 	logging.Logf(ctx, "<- %s from %s@%s key=%s size=%d", m.Type, m.From.ID.String()[:8], m.From.Addr, m.Key, len(m.Value))
 
-	resp, _ := handleRequest(n, m)
+	resp, _ := handleRequest(ctx, n, m)
 	_ = enc.Encode(resp)
 
 	logging.Logf(ctx, "-> %s to %s", resp.Type, c.RemoteAddr().String())
 }
 
-func handleRequest(n *Node, m rpc.RpcMessage) (rpc.RpcMessage, string) {
+func handleRequest(ctx context.Context, n *Node, m rpc.RpcMessage) (rpc.RpcMessage, string) {
 	conf := n.conf
 
 	switch m.Type {
@@ -122,7 +122,7 @@ func handleRequest(n *Node, m rpc.RpcMessage) (rpc.RpcMessage, string) {
 		if err != nil {
 			return rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: false}, ""
 		}
-		blk, err := n.blockProv.GetBlockLocal(context.TODO(), cid)
+		blk, err := n.blockProv.GetBlockLocal(ctx, cid)
 		if err != nil || blk == nil {
 			return rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: false}, ""
 		}
@@ -130,6 +130,34 @@ func handleRequest(n *Node, m rpc.RpcMessage) (rpc.RpcMessage, string) {
 			return rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: false}, ""
 		}
 		return rpc.RpcMessage{Type: rpc.FetchBlock, From: n.Contact(), Found: true, Value: blk.Bytes}, "key=" + m.Key
+
+	case rpc.PutBlock:
+		if m.Key == "" || len(m.Value) == 0 || n.blockProv == nil {
+			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
+		}
+		// Respect node policy for accepting foreign blocks
+		if !n.acceptForeignBlocks {
+			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, "rejected: foreign blocks disabled"
+		}
+		cid, err := block.DecodeCID(m.Key)
+		if err != nil {
+			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
+		}
+		blk, err := block.DecodeBlock(m.Value)
+		if err != nil || blk == nil {
+			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
+		}
+		if blk.CID != cid {
+			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
+		}
+		if err := n.blockProv.PutBlock(ctx, blk); err != nil {
+			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
+		}
+		// Non-optional pin to prevent data-loss on the accepting node
+		if err := n.blockProv.Pin(ctx, blk.CID); err != nil {
+			return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: false}, ""
+		}
+		return rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Found: true}, "key=" + m.Key
 	}
 	return rpc.RpcMessage{From: n.Contact()}, ""
 }

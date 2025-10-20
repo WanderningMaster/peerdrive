@@ -56,7 +56,6 @@ func (ps *Node) GetProviderRecord(ctx context.Context, cid block.CID) ([]Provide
 			continue
 		}
 
-		fmt.Println(string(mp.Addr))
 		mps = append(mps, mp)
 	}
 

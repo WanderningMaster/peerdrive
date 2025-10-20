@@ -13,11 +13,12 @@ import (
 )
 
 type UserConfig struct {
-	NodeId         id.NodeID `json:"nodeId"`
-	TcpPort        int       `json:"tcpPort"`
-	HttpPort       int       `json:"httpPort"`
-	Relay          string    `json:"relay,omitempty"`
-	BlockstorePath string    `json:"blockstorePath"`
+    NodeId         id.NodeID `json:"nodeId"`
+    TcpPort        int       `json:"tcpPort"`
+    HttpPort       int       `json:"httpPort"`
+    Relay          string    `json:"relay,omitempty"`
+    BlockstorePath string    `json:"blockstorePath"`
+    AcceptForeignBlocks bool `json:"acceptForeignBlocks"`
 }
 
 func getRandomPort(minPort, maxPort int) (int, error) {
@@ -85,10 +86,11 @@ func defaultUserConfig() *UserConfig {
 
 	httpPort := 8000 + tcpPort%1000
 
-	return &UserConfig{
-		TcpPort:        tcpPort,
-		HttpPort:       httpPort,
-		NodeId:         id.RandomID(),
-		BlockstorePath: EnsureBlockstore(),
-	}
+    return &UserConfig{
+        TcpPort:        tcpPort,
+        HttpPort:       httpPort,
+        NodeId:         id.RandomID(),
+        BlockstorePath: EnsureBlockstore(),
+        AcceptForeignBlocks: true,
+    }
 }

@@ -47,7 +47,7 @@ func (n *Node) AttachRelay(ctx context.Context, relayAddr string) error {
 		m := f.Payload
 		n.rt.Update(m.From)
 		// Reuse common handler
-		resp, _ := handleRequest(n, m)
+		resp, _ := handleRequest(ctx, n, m)
 		// Send DeliverResponse back
 		if err := enc.Encode(relay.Frame{Type: relay.DeliverResponse, ReqID: f.ReqID, Payload: resp}); err != nil {
 			return err

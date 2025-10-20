@@ -296,6 +296,29 @@ func (n *Node) FetchBlock(ctx context.Context, c routing.Contact, cid block.CID)
 	return m.Value, nil
 }
 
+func (n *Node) PutBlock(ctx context.Context, c routing.Contact, b *block.Block) error {
+    if b == nil {
+        return errors.New("nil block")
+    }
+    if len(b.Bytes) == 0 {
+        if err := b.Serialize(); err != nil {
+            return err
+        }
+    }
+    key, err := b.CID.Encode()
+    if err != nil {
+        return err
+    }
+    m, err := n.DialRpc(ctx, c, rpc.RpcMessage{Type: rpc.PutBlock, From: n.Contact(), Key: key, Value: b.Bytes})
+    if err != nil {
+        return err
+    }
+    if !m.Found {
+        return fmt.Errorf("remote refused block or pin failed")
+    }
+    return nil
+}
+
 func bestDist(cs []routing.Contact, target id.NodeID) *big.Int {
 	if len(cs) == 0 {
 		return new(big.Int).Lsh(big.NewInt(1), 256)

@@ -60,7 +60,7 @@ func kvGet(key string) {
 	printGet(resp)
 }
 
-func dfsPut(inPath string) {
+func dfsPut(inPath string, compress bool) {
 	conf := configuration.LoadUserConfig()
 	if inPath == "" {
 		log.Fatal("-in is required")
@@ -77,10 +77,13 @@ func dfsPut(inPath string) {
 	if err != nil {
 		log.Fatal(err)
 	}
-	u.Path = "/dfs/put"
-	q := u.Query()
-	q.Set("in", inPath)
-	u.RawQuery = q.Encode()
+    u.Path = "/dfs/put"
+    q := u.Query()
+    q.Set("in", inPath)
+    if compress {
+        q.Set("compress", "1")
+    }
+    u.RawQuery = q.Encode()
 
 	resp, err := http.Post(u.String(), "application/json", nil)
 	if err != nil {

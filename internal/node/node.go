@@ -15,9 +15,9 @@ import (
 )
 
 type Node struct {
-	ID             id.NodeID
-	Addr           string
-	AdvertisedAddr string
+    ID             id.NodeID
+    Addr           string
+    AdvertisedAddr string
 
 	rt        *routing.RoutingTable
 	storeMu   sync.RWMutex
@@ -32,15 +32,20 @@ type Node struct {
 
 	conf configuration.Config
 
-	needRelay bool
+    needRelay bool
 
-	relayAddr string
+    relayAddr string
+
+    // controls whether this node accepts PutBlock RPCs from other peers
+    acceptForeignBlocks bool
 }
 
-// BlockProvider supplies local blocks to serve via RPC.
-// Any type with GetBlock(ctx, cid) (*block.Block, error) satisfies it.
+// BlockProvider supplies local blocks to serve via RPC and allows storing.
+// It must also support pinning to prevent GC data-loss for remotely stored blocks.
 type BlockProvider interface {
-	GetBlockLocal(ctx context.Context, c block.CID) (*block.Block, error)
+    GetBlockLocal(ctx context.Context, c block.CID) (*block.Block, error)
+    PutBlock(ctx context.Context, b *block.Block) error
+    Pin(ctx context.Context, c block.CID) error
 }
 
 type kvRecord struct {
@@ -50,30 +55,33 @@ type kvRecord struct {
 }
 
 func NewNode(addr string) *Node {
-	id := id.RandomID()
-	n := &Node{
-		ID:        id,
-		Addr:      addr,
-		rt:        routing.NewRoutingTable(id),
-		store:     make(map[string]kvRecord),
-		FailCount: make(map[string]int),
-		conf:      configuration.Default(),
-	}
-	return n
+    id := id.RandomID()
+    n := &Node{
+        ID:        id,
+        Addr:      addr,
+        rt:        routing.NewRoutingTable(id),
+        store:     make(map[string]kvRecord),
+        FailCount: make(map[string]int),
+        conf:      configuration.Default(),
+        acceptForeignBlocks: true,
+    }
+    return n
 }
 func NewNodeWithId(addr string, id id.NodeID) *Node {
-	n := &Node{
-		ID:        id,
-		Addr:      addr,
-		rt:        routing.NewRoutingTable(id),
-		store:     make(map[string]kvRecord),
-		FailCount: make(map[string]int),
-		conf:      configuration.Default(),
-	}
-	return n
+    n := &Node{
+        ID:        id,
+        Addr:      addr,
+        rt:        routing.NewRoutingTable(id),
+        store:     make(map[string]kvRecord),
+        FailCount: make(map[string]int),
+        conf:      configuration.Default(),
+        acceptForeignBlocks: true,
+    }
+    return n
 }
 func (n *Node) SetBlockProvider(p BlockProvider) { n.blockProv = p }
 func (n *Node) SetAdvertisedAddr(addr string)    { n.AdvertisedAddr = addr }
+func (n *Node) SetAcceptForeignBlocks(v bool)    { n.acceptForeignBlocks = v }
 
 func (n *Node) Contact() routing.Contact {
 	return routing.Contact{ID: n.ID, Addr: n.advertisedAddr(), Relay: n.relayAddr}
@@ -107,6 +115,7 @@ func (n *Node) WithConfig(conf configuration.Config) *Node {
 }
 
 func (n *Node) KBucketK() int { return n.conf.KBucketK }
+func (n *Node) Replicas() int { return n.conf.Replicas }
 
 func (n *Node) gcLoop(ctx context.Context) {
 	t := time.NewTicker(n.conf.GCInterval)

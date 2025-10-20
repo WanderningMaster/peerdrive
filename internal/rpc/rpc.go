@@ -11,6 +11,7 @@ const (
 	FindValue RpcType = "FIND_VALUE"
 
 	FetchBlock RpcType = "FETCH_BLOCK"
+	PutBlock   RpcType = "PUT_BLOCK"
 )
 
 type RpcMessage struct {

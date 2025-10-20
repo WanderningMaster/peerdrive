@@ -3,6 +3,7 @@ package logging
 import (
 	"context"
 	"log"
+	"os"
 )
 
 type logKeyType int
@@ -31,6 +32,9 @@ func PrefixFrom(ctx context.Context) string {
 }
 
 func Logf(ctx context.Context, format string, args ...any) {
-	p := PrefixFrom(ctx)
-	log.Printf("[%s] "+format, append([]any{p}, args...)...)
+	arg := os.Getenv("VERBOSE")
+	if arg == "1" {
+		p := PrefixFrom(ctx)
+		log.Printf("[%s] "+format, append([]any{p}, args...)...)
+	}
 }

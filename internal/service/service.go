@@ -282,7 +282,7 @@ func (s *Service) Start(ctx context.Context, relayAddr string, peers []string) {
 	s.StartNode(ctx)
 
 	// FIXME???
-	m, _ := s.n.WhoAmI(ctx, "52.59.95.49")
+	m, _ := s.n.WhoAmI(ctx, "52.59.95.49:20018")
 	fmt.Println(string(m.Value))
 	s.n.SetAdvertisedAddr(net.JoinHostPort(string(m.Value), strconv.Itoa(s.conf.TcpPort)))
 

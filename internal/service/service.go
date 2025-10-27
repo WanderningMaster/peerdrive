@@ -282,7 +282,7 @@ func (s *Service) Start(ctx context.Context, relayAddr string, peers []string) {
 	s.StartNode(ctx)
 
 	// FIXME???
-	m, _ := s.n.WhoAmI(ctx, "3.127.69.180:20018")
+	m, _ := s.n.WhoAmI(ctx, "52.59.95.49")
 	fmt.Println(string(m.Value))
 	s.n.SetAdvertisedAddr(net.JoinHostPort(string(m.Value), strconv.Itoa(s.conf.TcpPort)))
 
@@ -336,6 +336,8 @@ func (s *Service) startReprovider(ctx context.Context, interval time.Duration) {
 
 func (s *Service) reprovideOnce(ctx context.Context) {
 	start := time.Now()
+
+	// FIXME: should reprovide soft pins as well
 	pins, err := s.store.ListPins(ctx)
 	if err != nil {
 		logging.Logf(ctx, "reprovide: list pins error: %v", err)

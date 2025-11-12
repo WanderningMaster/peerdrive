@@ -40,7 +40,7 @@ func main() {
 		chunkSize   = flag.Int("chunk", 1<<20, "DAG chunk size in bytes")
 		fanout      = flag.Int("fanout", 256, "DAG fanout for tree nodes")
 		fetchPar    = flag.Int("fetch-par", 16, "concurrency during fetch (parallel block downloads)")
-		keepLocal   = flag.Float64("keep-local", 0.0, "fraction of non-manifest blocks to keep locally [0..1]")
+		keepLocal   = flag.Float64("keep-local", 0.5, "fraction of non-manifest blocks to keep locally [0..1]")
 	)
 
 	// Churn flags
@@ -49,6 +49,11 @@ func main() {
 		churnProb      = flag.Float64("churn-prob", 1, "probability to restart one random node each interval [0..1]")
 		churnStartWait = flag.Duration("churn-after", 2*time.Second, "delay after bootstrap before starting churn")
 		churnPeerFan   = flag.Int("churn-peers", 5, "number of peers to connect on restart (bootstrap fan)")
+		// Simulated randomized node downtime and per-request serve latency
+		downTimeMin   = flag.Duration("down-time-min", 200*time.Millisecond, "minimum simulated node down-time on churn")
+		downTimeMax   = flag.Duration("down-time-max", 1500*time.Millisecond, "maximum simulated node down-time on churn")
+		serveDelayMin = flag.Duration("serve-delay-min", 2*time.Millisecond, "minimum per-RPC serve delay when serving blocks")
+		serveDelayMax = flag.Duration("serve-delay-max", 20*time.Millisecond, "maximum per-RPC serve delay when serving blocks")
 	)
 
 	// Config flags (from configuration.Config, excluding IdBits)
@@ -100,7 +105,7 @@ func main() {
 	mrand.Seed(time.Now().UnixNano())
 
 	// Start cluster
-	sims := startCluster(*nodes, *basePort, conf, *softPinTTL)
+	sims := startCluster(*nodes, *basePort, conf, *softPinTTL, *serveDelayMin, *serveDelayMax)
 	defer stopCluster(sims)
 
 	// Warmup, then bootstrap
@@ -110,7 +115,7 @@ func main() {
 	// Start churn after a short delay
 	time.Sleep(*churnStartWait)
 	churnCtx, churnCancel := contextWithCancel()
-	go runChurn(churnCtx, sims, conf, *softPinTTL, *churnInterval, *churnProb, *churnPeerFan)
+	go runChurn(churnCtx, sims, conf, *softPinTTL, *churnInterval, *churnProb, *churnPeerFan, *downTimeMin, *downTimeMax, *serveDelayMin, *serveDelayMax)
 
 	// Measure availability and latency over randomized upload/download trials
 	fmt.Println("=== Configuration (with churn) ===")
@@ -119,21 +124,15 @@ func main() {
 	fmt.Printf("K=%d alpha=%d replicas=%d rpc=%s refresh=%s ttl=%s republish=%s gc=%s revalidate=%s maxValue=%d failThresh=%d softTTL=%s\n",
 		conf.KBucketK, conf.Alpha, conf.Replicas, conf.RpcTimeout, conf.BucketRefresh, conf.RecordTTL,
 		conf.RepublishInterval, conf.GCInterval, conf.RevalidateInterval, conf.MaxValueSize, conf.FailureThreshold, *softPinTTL)
-	fmt.Printf("churn: interval=%s prob=%.2f after=%s peers=%d\n", *churnInterval, *churnProb, *churnStartWait, *churnPeerFan)
+	fmt.Printf("churn: interval=%s prob=%.2f after=%s peers=%d down-time=[%s..%s] serve-delay=[%s..%s]\n", *churnInterval, *churnProb, *churnStartWait, *churnPeerFan, *downTimeMin, *downTimeMax, *serveDelayMin, *serveDelayMax)
 
 	res := runTrials(sims, *trials, *fetchPar, conf, *payloadSize, *chunkSize, *fanout, *keepLocal, *settle)
 	churnCancel()
 	printResults(res)
-
-	// After trials, run GC on all stores and report total stored bytes
-	blocks, bytes := gcAndStats(sims)
-	fmt.Println("=== Totals ===")
-	fmt.Printf("uploaded_total_bytes=%d\n", res.UploadedBytes)
-	fmt.Printf("cluster_stored_bytes_after_gc=%d blocks=%d\n", bytes, blocks)
 }
 
 // startCluster spins up N nodes with in-memory blockstores and applies the provided config.
-func startCluster(n int, basePort int, conf configuration.Config, softTTL time.Duration) []*simNode {
+func startCluster(n int, basePort int, conf configuration.Config, softTTL time.Duration, serveDelayMin, serveDelayMax time.Duration) []*simNode {
 	sims := make([]*simNode, n)
 	for i := 0; i < n; i++ {
 		addr := fmt.Sprintf("127.0.0.1:%d", basePort+i)
@@ -145,7 +144,11 @@ func startCluster(n int, basePort int, conf configuration.Config, softTTL time.D
 			storage.WithFetcher(blockfetcher.New(nd)),
 			storage.WithSoftTTL(softTTL),
 		)
-		nd.SetBlockProvider(mem)
+		if serveDelayMax > 0 {
+			nd.SetBlockProvider(newDelayedProvider(mem, serveDelayMin, serveDelayMax))
+		} else {
+			nd.SetBlockProvider(mem)
+		}
 		sn.n = nd
 		sn.mem = mem
 		// Start server
@@ -228,6 +231,7 @@ func runTrials(
 	fail := 0
 	var uploaded int64
 	for i := 0; i < trials; i++ {
+		fmt.Printf("%d/%d\n", i+1, trials)
 		// Choose random uploader node and build + distribute unique content
 		up := sims[mrand.Intn(len(sims))]
 		bctx, bcancel := contextWithTimeout(30 * time.Second)
@@ -329,7 +333,7 @@ func printResults(r trialResult) {
 }
 
 // Churn management: periodically restarts random nodes with given probability.
-func runChurn(ctx context.Context, sims []*simNode, conf configuration.Config, softTTL time.Duration, interval time.Duration, prob float64, peerFan int) {
+func runChurn(ctx context.Context, sims []*simNode, conf configuration.Config, softTTL time.Duration, interval time.Duration, prob float64, peerFan int, downMin, downMax time.Duration, serveDelayMin, serveDelayMax time.Duration) {
 	ticker := time.NewTicker(interval)
 	defer ticker.Stop()
 	for {
@@ -344,12 +348,12 @@ func runChurn(ctx context.Context, sims []*simNode, conf configuration.Config, s
 				continue
 			}
 			idx := mrand.Intn(len(sims))
-			restartNodeAt(sims, idx, conf, softTTL, peerFan)
+			restartNodeAt(sims, idx, conf, softTTL, peerFan, downMin, downMax, serveDelayMin, serveDelayMax)
 		}
 	}
 }
 
-func restartNodeAt(sims []*simNode, idx int, conf configuration.Config, softTTL time.Duration, peerFan int) {
+func restartNodeAt(sims []*simNode, idx int, conf configuration.Config, softTTL time.Duration, peerFan int, downMin, downMax time.Duration, serveDelayMin, serveDelayMax time.Duration) {
 	if idx < 0 || idx >= len(sims) {
 		return
 	}
@@ -361,8 +365,8 @@ func restartNodeAt(sims []*simNode, idx int, conf configuration.Config, softTTL 
 	if old.stop != nil {
 		old.stop()
 	}
-	// Tiny pause to reduce port reuse races
-	time.Sleep(50 * time.Millisecond)
+	// Simulated down-time window before the node is back
+	time.Sleep(randDuration(downMin, downMax))
 
 	// Start new node with a fresh in-memory store (simulate real restart)
 	addr := old.addr
@@ -371,7 +375,11 @@ func restartNodeAt(sims []*simNode, idx int, conf configuration.Config, softTTL 
 		storage.WithFetcher(blockfetcher.New(nd)),
 		storage.WithSoftTTL(softTTL),
 	)
-	nd.SetBlockProvider(mem)
+	if serveDelayMax > 0 {
+		nd.SetBlockProvider(newDelayedProvider(mem, serveDelayMin, serveDelayMax))
+	} else {
+		nd.SetBlockProvider(mem)
+	}
 	ctx, cancel := contextWithCancel()
 	sn := &simNode{addr: addr, n: nd, mem: mem, stop: cancel}
 	sims[idx] = sn
@@ -409,6 +417,59 @@ func samplePeersExcept(sims []*simNode, except int, m int) []string {
 		out = append(out, sims[idxs[i]].addr)
 	}
 	return out
+}
+
+// delayedProvider wraps a MemStore and injects a randomized delay before serving local block reads.
+type delayedProvider struct {
+	inner *storage.MemStore
+	min   time.Duration
+	max   time.Duration
+}
+
+func newDelayedProvider(inner *storage.MemStore, min, max time.Duration) *delayedProvider {
+	if max < min {
+		max = min
+	}
+	return &delayedProvider{inner: inner, min: min, max: max}
+}
+
+func (d *delayedProvider) sleep() {
+	if d.max <= 0 {
+		return
+	}
+	dur := randDuration(d.min, d.max)
+	if dur > 0 {
+		time.Sleep(dur)
+	}
+}
+
+// Implement node.BlockProvider by forwarding to the inner store.
+func (d *delayedProvider) GetBlockLocal(ctx context.Context, c block.CID) (*block.Block, error) {
+	d.sleep()
+	return d.inner.GetBlockLocal(ctx, c)
+}
+func (d *delayedProvider) PutBlock(ctx context.Context, b *block.Block) error {
+	return d.inner.PutBlock(ctx, b)
+}
+func (d *delayedProvider) Pin(ctx context.Context, c block.CID) error { return d.inner.Pin(ctx, c) }
+func (d *delayedProvider) PinSoft(ctx context.Context, c block.CID) error {
+	return d.inner.PinSoft(ctx, c)
+}
+func (d *delayedProvider) Unpin(ctx context.Context, c block.CID) error { return d.inner.Unpin(ctx, c) }
+
+// randDuration returns a random duration in [min, max]. If max <= 0, returns 0.
+func randDuration(min, max time.Duration) time.Duration {
+	if max <= 0 {
+		return 0
+	}
+	if max < min {
+		max = min
+	}
+	delta := max - min
+	if delta <= 0 {
+		return min
+	}
+	return min + time.Duration(mrand.Int63n(int64(delta)))
 }
 
 func percentile(ds []time.Duration, p float64) time.Duration {

@@ -17,9 +17,10 @@ import (
 	blockfetcher "github.com/WanderningMaster/peerdrive/internal/block-fetcher"
 	"github.com/WanderningMaster/peerdrive/internal/dag"
 	"github.com/WanderningMaster/peerdrive/internal/node"
-	"github.com/WanderningMaster/peerdrive/internal/service"
 	"github.com/WanderningMaster/peerdrive/internal/storage"
 )
+
+// e2e-local-churn: same as e2e-local but randomly restarts nodes during trials.
 
 type simNode struct {
 	addr string
@@ -29,18 +30,25 @@ type simNode struct {
 }
 
 func main() {
-	// Cluster / workload flags
+	// Cluster / workload flags (mirrors cmd/e2e-local)
 	var (
 		nodes       = flag.Int("nodes", 25, "number of nodes in the cluster")
 		basePort    = flag.Int("base-port", 9100, "base TCP port for nodes")
 		warmup      = flag.Duration("warmup", 750*time.Millisecond, "time to wait after starting nodes before bootstrap")
-		settle      = flag.Duration("settle", 1*time.Second, "time to wait after placement before measurements")
+		settle      = flag.Duration("settle", 1*time.Second, "time to wait after build before measurements")
 		trials      = flag.Int("trials", 50, "number of fetch trials")
 		payloadSize = flag.Int("size", 2<<20, "payload size in bytes")
 		chunkSize   = flag.Int("chunk", 1<<20, "DAG chunk size in bytes")
 		fanout      = flag.Int("fanout", 256, "DAG fanout for tree nodes")
 		fetchPar    = flag.Int("fetch-par", 16, "concurrency during fetch (parallel block downloads)")
-		keepLocal   = flag.Float64("keep-local", 0.0, "fraction of non-manifest blocks to keep locally [0..1]")
+	)
+
+	// Churn flags
+	var (
+		churnInterval  = flag.Duration("churn-interval", 3*time.Second, "interval between churn attempts")
+		churnProb      = flag.Float64("churn-prob", 1, "probability to restart one random node each interval [0..1]")
+		churnStartWait = flag.Duration("churn-after", 2*time.Second, "delay after bootstrap before starting churn")
+		churnPeerFan   = flag.Int("churn-peers", 5, "number of peers to connect on restart (bootstrap fan)")
 	)
 
 	// Config flags (from configuration.Config, excluding IdBits)
@@ -81,8 +89,8 @@ func main() {
 	if *payloadSize < 0 || *chunkSize <= 0 || *fanout < 2 {
 		log.Fatalf("invalid DAG params: size=%d chunk=%d fanout=%d", *payloadSize, *chunkSize, *fanout)
 	}
-	if *keepLocal < 0.0 || *keepLocal > 1.0 {
-		log.Fatalf("keep-local must be in [0..1]")
+	if *churnProb < 0.0 || *churnProb > 1.0 {
+		log.Fatalf("churn-prob must be in [0..1]")
 	}
 
 	// Seed PRNG for test randomness
@@ -96,22 +104,23 @@ func main() {
 	time.Sleep(*warmup)
 	bootstrapCluster(sims)
 
+	// Start churn after a short delay
+	time.Sleep(*churnStartWait)
+	churnCtx, churnCancel := contextWithCancel()
+	go runChurn(churnCtx, sims, conf, *softPinTTL, *churnInterval, *churnProb, *churnPeerFan)
+
 	// Measure availability and latency over randomized upload/download trials
-	fmt.Println("=== Configuration ===")
-	fmt.Printf("nodes=%d basePort=%d size=%d chunk=%d fanout=%d fetch-par=%d keep-local=%.2f\n",
-		*nodes, *basePort, *payloadSize, *chunkSize, *fanout, *fetchPar, *keepLocal)
+	fmt.Println("=== Configuration (local-only with churn) ===")
+	fmt.Printf("nodes=%d basePort=%d size=%d chunk=%d fanout=%d fetch-par=%d\n",
+		*nodes, *basePort, *payloadSize, *chunkSize, *fanout, *fetchPar)
 	fmt.Printf("K=%d alpha=%d replicas=%d rpc=%s refresh=%s ttl=%s republish=%s gc=%s revalidate=%s maxValue=%d failThresh=%d softTTL=%s\n",
 		conf.KBucketK, conf.Alpha, conf.Replicas, conf.RpcTimeout, conf.BucketRefresh, conf.RecordTTL,
 		conf.RepublishInterval, conf.GCInterval, conf.RevalidateInterval, conf.MaxValueSize, conf.FailureThreshold, *softPinTTL)
+	fmt.Printf("churn: interval=%s prob=%.2f after=%s peers=%d\n", *churnInterval, *churnProb, *churnStartWait, *churnPeerFan)
 
-	res := runTrials(sims, *trials, *fetchPar, conf, *payloadSize, *chunkSize, *fanout, *keepLocal, *settle)
+	res := runTrials(sims, *trials, *fetchPar, conf, *payloadSize, *chunkSize, *fanout, *settle)
+	churnCancel()
 	printResults(res)
-
-	// After trials, run GC on all stores and report total stored bytes
-	blocks, bytes := gcAndStats(sims)
-	fmt.Println("=== Totals ===")
-	fmt.Printf("uploaded_total_bytes=%d\n", res.UploadedBytes)
-	fmt.Printf("cluster_stored_bytes_after_gc=%d blocks=%d\n", bytes, blocks)
 }
 
 // startCluster spins up N nodes with in-memory blockstores and applies the provided config.
@@ -165,7 +174,8 @@ func bootstrapCluster(sims []*simNode) {
 	}
 }
 
-func buildAndDistribute(ctx context.Context, sn *simNode, size int, chunk int, fanout int, keepLocal float64) (block.CID, []byte) {
+// buildLocal constructs the DAG and stores all blocks only in the local in-memory store.
+func buildLocal(ctx context.Context, sn *simNode, size int, chunk int, fanout int) (block.CID, []byte) {
 	if size < 0 {
 		size = 0
 	}
@@ -174,8 +184,7 @@ func buildAndDistribute(ctx context.Context, sn *simNode, size int, chunk int, f
 		log.Printf("rand: %v", err)
 		return block.CID{}, nil
 	}
-	ds := service.NewDistStore(sn.n, sn.mem, sn.n.Replicas(), service.KeepLocalSelector(true, keepLocal))
-	builder := dag.DagBuilder{ChunkSize: chunk, Fanout: fanout, Codec: "cbor", Store: ds}
+	builder := dag.DagBuilder{ChunkSize: chunk, Fanout: fanout, Codec: "cbor", Store: sn.mem}
 	_, cid, err := builder.BuildFromReader(ctx, "payload.bin", "application/octet-stream", bytes.NewReader(payload))
 	if err != nil {
 		log.Printf("build failed: %v", err)
@@ -185,10 +194,9 @@ func buildAndDistribute(ctx context.Context, sn *simNode, size int, chunk int, f
 }
 
 type trialResult struct {
-	Successes     int
-	Failures      int
-	Latencies     []time.Duration
-	UploadedBytes int64
+	Successes int
+	Failures  int
+	Latencies []time.Duration
 }
 
 func runTrials(
@@ -199,7 +207,6 @@ func runTrials(
 	payloadSize int,
 	chunkSize int,
 	fanout int,
-	keepLocal float64,
 	settle time.Duration,
 ) trialResult {
 	if trials <= 0 {
@@ -208,20 +215,18 @@ func runTrials(
 	lats := make([]time.Duration, 0, trials)
 	succ := 0
 	fail := 0
-	var uploaded int64
 	for i := 0; i < trials; i++ {
-		// Choose random uploader node and build + distribute unique content
+		// Choose random uploader node and build content locally only
 		up := sims[mrand.Intn(len(sims))]
 		bctx, bcancel := contextWithTimeout(30 * time.Second)
-		cid, payload := buildAndDistribute(bctx, up, payloadSize, chunkSize, fanout, keepLocal)
+		cid, payload := buildLocal(bctx, up, payloadSize, chunkSize, fanout)
 		bcancel()
 		if (cid == block.CID{}) {
 			fail++
 			continue
 		}
-		uploaded += int64(len(payload))
 
-		// Allow provider/DHT records to settle before fetching
+		// Allow local provider announcements to settle (via mem store)
 		if settle > 0 {
 			time.Sleep(settle)
 		}
@@ -239,50 +244,90 @@ func runTrials(
 		succ++
 		lats = append(lats, time.Since(start))
 	}
-	return trialResult{Successes: succ, Failures: fail, Latencies: lats, UploadedBytes: uploaded}
+	return trialResult{Successes: succ, Failures: fail, Latencies: lats}
 }
 
-// gcAndStats runs GC on all nodes, then aggregates cluster-wide stats.
-func gcAndStats(sims []*simNode) (totalBlocks int, totalBytes int64) {
-	var blocks int
-	var bytes int64
-	ctx := contextBackground()
-	for _, sn := range sims {
-		if sn == nil || sn.mem == nil {
-			continue
+// Churn management: periodically restarts random nodes with given probability.
+func runChurn(ctx context.Context, sims []*simNode, conf configuration.Config, softTTL time.Duration, interval time.Duration, prob float64, peerFan int) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if mrand.Float64() > prob {
+				continue
+			}
+			if len(sims) == 0 {
+				continue
+			}
+			idx := mrand.Intn(len(sims))
+			restartNodeAt(sims, idx, conf, softTTL, peerFan)
 		}
-		b, by, err := sn.mem.Stats(ctx)
-		if err != nil {
-			continue
-		}
-		blocks += b
-		bytes += by
 	}
-	fmt.Println("before GC")
-	fmt.Println("blocks", blocks)
-	fmt.Println("bytes", bytes)
+}
 
-	blocks = 0
-	bytes = 0
-	ctx = contextBackground()
-	for _, sn := range sims {
-		if sn == nil || sn.mem == nil {
-			continue
-		}
-		_, _ = sn.mem.GC(ctx)
+func restartNodeAt(sims []*simNode, idx int, conf configuration.Config, softTTL time.Duration, peerFan int) {
+	if idx < 0 || idx >= len(sims) {
+		return
 	}
-	for _, sn := range sims {
-		if sn == nil || sn.mem == nil {
-			continue
-		}
-		b, by, err := sn.mem.Stats(ctx)
-		if err != nil {
-			continue
-		}
-		blocks += b
-		bytes += by
+	old := sims[idx]
+	if old == nil {
+		return
 	}
-	return blocks, bytes
+	// Stop old node
+	if old.stop != nil {
+		old.stop()
+	}
+	// Tiny pause to reduce port reuse races
+	time.Sleep(50 * time.Millisecond)
+
+	// Start new node with a fresh in-memory store (simulate real restart)
+	addr := old.addr
+	nd := node.NewNode(addr).WithConfig(conf)
+	mem := storage.NewMemStore(
+		storage.WithFetcher(blockfetcher.New(nd)),
+		storage.WithSoftTTL(softTTL),
+	)
+	nd.SetBlockProvider(mem)
+	ctx, cancel := contextWithCancel()
+	sn := &simNode{addr: addr, n: nd, mem: mem, stop: cancel}
+	sims[idx] = sn
+	go func(n *node.Node, id string) {
+		if err := n.ListenAndServe(ctx); err != nil {
+			log.Printf("restarted node %s stopped: %v", id, err)
+		}
+	}(nd, nd.ID.String()[:8])
+
+	// Bootstrap to a sample of peers
+	peers := samplePeersExcept(sims, idx, min(peerFan, len(sims)-1))
+	if len(peers) > 0 {
+		go nd.Bootstrap(contextBackground(), peers)
+	}
+}
+
+func samplePeersExcept(sims []*simNode, except int, m int) []string {
+	if m <= 0 {
+		return nil
+	}
+	idxs := make([]int, 0, len(sims)-1)
+	for i := range sims {
+		if i != except {
+			idxs = append(idxs, i)
+		}
+	}
+	if len(idxs) == 0 {
+		return nil
+	}
+	// shuffle
+	mrand.Shuffle(len(idxs), func(i, j int) { idxs[i], idxs[j] = idxs[j], idxs[i] })
+	take := min(m, len(idxs))
+	out := make([]string, 0, take)
+	for i := 0; i < take; i++ {
+		out = append(out, sims[idxs[i]].addr)
+	}
+	return out
 }
 
 func printResults(r trialResult) {

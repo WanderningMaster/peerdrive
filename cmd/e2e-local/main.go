@@ -98,18 +98,7 @@ func main() {
     time.Sleep(*warmup)
     bootstrapCluster(sims)
 
-    // Build payload on node 0 using ONLY local in-memory store
-    ctx, cancel := contextWithTimeout(30 * time.Second)
-    cid, payload := buildLocal(ctx, sims[0], *payloadSize, *chunkSize, *fanout)
-    cancel()
-    if (cid == block.CID{}) {
-        log.Fatalf("failed to build payload")
-    }
-
-    // Give DHT/provider records a moment to settle (announcements are still done by mem store)
-    time.Sleep(*settle)
-
-    // Measure availability and latency
+    // Measure availability and latency over randomized upload/download trials
     fmt.Println("=== Configuration (local-only) ===")
     fmt.Printf("nodes=%d basePort=%d size=%d chunk=%d fanout=%d fetch-par=%d keep-local=%.2f (ignored)\n",
         *nodes, *basePort, *payloadSize, *chunkSize, *fanout, *fetchPar, *keepLocal)
@@ -117,7 +106,7 @@ func main() {
         conf.KBucketK, conf.Alpha, conf.Replicas, conf.RpcTimeout, conf.BucketRefresh, conf.RecordTTL,
         conf.RepublishInterval, conf.GCInterval, conf.RevalidateInterval, conf.MaxValueSize, conf.FailureThreshold, *softPinTTL)
 
-    res := runTrials(sims, cid, len(payload), *trials, *fetchPar, conf)
+    res := runTrials(sims, *trials, *fetchPar, conf, *payloadSize, *chunkSize, *fanout, *settle)
     printResults(res)
 }
 
@@ -197,7 +186,16 @@ type trialResult struct {
     Latencies []time.Duration
 }
 
-func runTrials(sims []*simNode, cid block.CID, expectSize int, trials int, fetchPar int, conf configuration.Config) trialResult {
+func runTrials(
+    sims []*simNode,
+    trials int,
+    fetchPar int,
+    conf configuration.Config,
+    payloadSize int,
+    chunkSize int,
+    fanout int,
+    settle time.Duration,
+) trialResult {
     if trials <= 0 {
         trials = 1
     }
@@ -205,14 +203,28 @@ func runTrials(sims []*simNode, cid block.CID, expectSize int, trials int, fetch
     succ := 0
     fail := 0
     for i := 0; i < trials; i++ {
-        // choose random node
-        sn := sims[mrand.Intn(len(sims))]
-        // generous per-trial timeout based on RPC timeout and expected fanout
+        // Choose random uploader node and build content locally only
+        up := sims[mrand.Intn(len(sims))]
+        bctx, bcancel := contextWithTimeout(30 * time.Second)
+        cid, payload := buildLocal(bctx, up, payloadSize, chunkSize, fanout)
+        bcancel()
+        if (cid == block.CID{}) {
+            fail++
+            continue
+        }
+
+        // Allow local provider announcements to settle (via mem store)
+        if settle > 0 {
+            time.Sleep(settle)
+        }
+
+        // Fetch from a random (possibly different) node
+        dn := sims[mrand.Intn(len(sims))]
         ctx, cancel := contextWithTimeout(maxDuration(5*conf.RpcTimeout, 10*time.Second))
         start := time.Now()
-        data, err := dag.FetchParallel(ctx, sn.mem, cid, fetchPar)
+        data, err := dag.FetchParallel(ctx, dn.mem, cid, fetchPar)
         cancel()
-        if err != nil || len(data) != expectSize {
+        if err != nil || len(data) != len(payload) {
             fail++
             continue
         }
@@ -300,4 +312,3 @@ func maxDuration(a, b time.Duration) time.Duration {
 // Keep import list tidy even if editors reorder
 // (alias to avoid "context" unused during refactors)
 var _ = strings.Builder{} // keep strings import used
-

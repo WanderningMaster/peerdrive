@@ -43,6 +43,14 @@ func main() {
 		keepLocal   = flag.Float64("keep-local", 0.0, "fraction of non-manifest blocks to keep locally [0..1]")
 	)
 
+	// Churn flags
+	var (
+		churnInterval  = flag.Duration("churn-interval", 3*time.Second, "interval between churn attempts")
+		churnProb      = flag.Float64("churn-prob", 1, "probability to restart one random node each interval [0..1]")
+		churnStartWait = flag.Duration("churn-after", 2*time.Second, "delay after bootstrap before starting churn")
+		churnPeerFan   = flag.Int("churn-peers", 5, "number of peers to connect on restart (bootstrap fan)")
+	)
+
 	// Config flags (from configuration.Config, excluding IdBits)
 	var (
 		kBucketK          = flag.Int("k", configuration.Default().KBucketK, "k-bucket size (K)")
@@ -84,6 +92,9 @@ func main() {
 	if *keepLocal < 0.0 || *keepLocal > 1.0 {
 		log.Fatalf("keep-local must be in [0..1]")
 	}
+	if *churnProb < 0.0 || *churnProb > 1.0 {
+		log.Fatalf("churn-prob must be in [0..1]")
+	}
 
 	// Seed PRNG for test randomness
 	mrand.Seed(time.Now().UnixNano())
@@ -96,15 +107,22 @@ func main() {
 	time.Sleep(*warmup)
 	bootstrapCluster(sims)
 
+	// Start churn after a short delay
+	time.Sleep(*churnStartWait)
+	churnCtx, churnCancel := contextWithCancel()
+	go runChurn(churnCtx, sims, conf, *softPinTTL, *churnInterval, *churnProb, *churnPeerFan)
+
 	// Measure availability and latency over randomized upload/download trials
-	fmt.Println("=== Configuration ===")
+	fmt.Println("=== Configuration (with churn) ===")
 	fmt.Printf("nodes=%d basePort=%d size=%d chunk=%d fanout=%d fetch-par=%d keep-local=%.2f\n",
 		*nodes, *basePort, *payloadSize, *chunkSize, *fanout, *fetchPar, *keepLocal)
 	fmt.Printf("K=%d alpha=%d replicas=%d rpc=%s refresh=%s ttl=%s republish=%s gc=%s revalidate=%s maxValue=%d failThresh=%d softTTL=%s\n",
 		conf.KBucketK, conf.Alpha, conf.Replicas, conf.RpcTimeout, conf.BucketRefresh, conf.RecordTTL,
 		conf.RepublishInterval, conf.GCInterval, conf.RevalidateInterval, conf.MaxValueSize, conf.FailureThreshold, *softPinTTL)
+	fmt.Printf("churn: interval=%s prob=%.2f after=%s peers=%d\n", *churnInterval, *churnProb, *churnStartWait, *churnPeerFan)
 
 	res := runTrials(sims, *trials, *fetchPar, conf, *payloadSize, *chunkSize, *fanout, *keepLocal, *settle)
+	churnCancel()
 	printResults(res)
 
 	// After trials, run GC on all stores and report total stored bytes
@@ -308,6 +326,89 @@ func printResults(r trialResult) {
 	mean := meanDur(r.Latencies)
 
 	fmt.Printf("latency: min=%s p50=%s p95=%s p99=%s max=%s mean=%s\n", min, med, p95, p99, max, mean)
+}
+
+// Churn management: periodically restarts random nodes with given probability.
+func runChurn(ctx context.Context, sims []*simNode, conf configuration.Config, softTTL time.Duration, interval time.Duration, prob float64, peerFan int) {
+	ticker := time.NewTicker(interval)
+	defer ticker.Stop()
+	for {
+		select {
+		case <-ctx.Done():
+			return
+		case <-ticker.C:
+			if mrand.Float64() > prob {
+				continue
+			}
+			if len(sims) == 0 {
+				continue
+			}
+			idx := mrand.Intn(len(sims))
+			restartNodeAt(sims, idx, conf, softTTL, peerFan)
+		}
+	}
+}
+
+func restartNodeAt(sims []*simNode, idx int, conf configuration.Config, softTTL time.Duration, peerFan int) {
+	if idx < 0 || idx >= len(sims) {
+		return
+	}
+	old := sims[idx]
+	if old == nil {
+		return
+	}
+	// Stop old node
+	if old.stop != nil {
+		old.stop()
+	}
+	// Tiny pause to reduce port reuse races
+	time.Sleep(50 * time.Millisecond)
+
+	// Start new node with a fresh in-memory store (simulate real restart)
+	addr := old.addr
+	nd := node.NewNode(addr).WithConfig(conf)
+	mem := storage.NewMemStore(
+		storage.WithFetcher(blockfetcher.New(nd)),
+		storage.WithSoftTTL(softTTL),
+	)
+	nd.SetBlockProvider(mem)
+	ctx, cancel := contextWithCancel()
+	sn := &simNode{addr: addr, n: nd, mem: mem, stop: cancel}
+	sims[idx] = sn
+	go func(n *node.Node, id string) {
+		if err := n.ListenAndServe(ctx); err != nil {
+			log.Printf("restarted node %s stopped: %v", id, err)
+		}
+	}(nd, nd.ID.String()[:8])
+
+	// Bootstrap to a sample of peers
+	peers := samplePeersExcept(sims, idx, min(peerFan, len(sims)-1))
+	if len(peers) > 0 {
+		go nd.Bootstrap(contextBackground(), peers)
+	}
+}
+
+func samplePeersExcept(sims []*simNode, except int, m int) []string {
+	if m <= 0 {
+		return nil
+	}
+	idxs := make([]int, 0, len(sims)-1)
+	for i := range sims {
+		if i != except {
+			idxs = append(idxs, i)
+		}
+	}
+	if len(idxs) == 0 {
+		return nil
+	}
+	// shuffle
+	mrand.Shuffle(len(idxs), func(i, j int) { idxs[i], idxs[j] = idxs[j], idxs[i] })
+	take := min(m, len(idxs))
+	out := make([]string, 0, take)
+	for i := 0; i < take; i++ {
+		out = append(out, sims[idxs[i]].addr)
+	}
+	return out
 }
 
 func percentile(ds []time.Duration, p float64) time.Duration {

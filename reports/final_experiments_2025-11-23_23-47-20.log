@@ -1,0 +1,170 @@
+
+===== sweep keep-local=0.20: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 2097152 --chunk 262144 --keep-local 0.20 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16 keep-local=0.20 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=147 fail=3 availability=98.00%
+upload latency: min=127.452129ms p50=142.112869ms p95=165.035983ms p99=176.053269ms max=199.263984ms mean=144.965384ms
+fetch latency:  min=771.842µs p50=8.542895ms p95=12.715851ms p99=14.752184ms max=21.157216ms mean=8.626195ms
+upload throughput: mean=14.53 MB/s p95=15.65 MB/s total-bytes=314572800
+fetch throughput:  mean=289.80 MB/s p95=458.56 MB/s total-bytes=308281344
+status: OK
+
+===== sweep keep-local=0.50: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 2097152 --chunk 262144 --keep-local 0.50 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=148 fail=2 availability=98.67%
+upload latency: min=127.881912ms p50=146.565724ms p95=171.060877ms p99=185.096678ms max=203.708806ms mean=149.309739ms
+fetch latency:  min=2.318635ms p50=9.354199ms p95=13.96312ms p99=17.009493ms max=19.194304ms mean=9.148142ms
+upload throughput: mean=14.12 MB/s p95=15.32 MB/s total-bytes=314572800
+fetch throughput:  mean=258.50 MB/s p95=427.09 MB/s total-bytes=310378496
+status: OK
+
+===== sweep keep-local=0.90: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 2097152 --chunk 262144 --keep-local 0.90 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16 keep-local=0.90 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=148 fail=2 availability=98.67%
+upload latency: min=135.798145ms p50=150.421032ms p95=176.975883ms p99=193.582843ms max=221.658169ms mean=153.846258ms
+fetch latency:  min=1.683737ms p50=8.7099ms p95=14.475468ms p99=15.844208ms max=18.915693ms mean=8.82658ms
+upload throughput: mean=13.72 MB/s p95=14.92 MB/s total-bytes=314572800
+fetch throughput:  mean=274.21 MB/s p95=486.64 MB/s total-bytes=310378496
+status: OK
+
+===== sweep chunk=262144 size=2097152: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 2097152 --keep-local 0.50 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=148 fail=2 availability=98.67%
+upload latency: min=133.242193ms p50=145.851936ms p95=172.830763ms p99=181.90858ms max=183.384595ms mean=148.619789ms
+fetch latency:  min=2.190502ms p50=8.960484ms p95=14.064613ms p99=17.064723ms max=20.630727ms mean=9.16096ms
+upload throughput: mean=14.17 MB/s p95=15.23 MB/s total-bytes=314572800
+fetch throughput:  mean=258.35 MB/s p95=424.21 MB/s total-bytes=310378496
+status: OK
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=3) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=3
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=3
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=143 fail=7 availability=95.33%
+upload latency: min=324.293875ms p50=357.362254ms p95=415.17542ms p99=427.091497ms max=448.730827ms mean=364.476247ms
+fetch latency:  min=5.373186ms p50=11.829497ms p95=19.30229ms p99=23.415531ms max=24.860563ms mean=12.364472ms
+upload throughput: mean=14.46 MB/s p95=15.73 MB/s total-bytes=786432000
+fetch throughput:  mean=471.69 MB/s p95=739.56 MB/s total-bytes=749731840
+status: OK
+
+===== sweep chunk=524288 size=2097152: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 524288 --size 2097152 --keep-local 0.50 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=524288 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=147 fail=3 availability=98.00%
+upload latency: min=104.964224ms p50=116.009498ms p95=132.889275ms p99=143.500609ms max=166.972199ms mean=117.9861ms
+fetch latency:  min=3.772849ms p50=10.592169ms p95=15.523622ms p99=19.555441ms max=23.543554ms mean=10.953896ms
+upload throughput: mean=17.86 MB/s p95=19.40 MB/s total-bytes=314572800
+fetch throughput:  mean=206.23 MB/s p95=289.61 MB/s total-bytes=308281344
+status: OK
+
+===== sweep chunk=524288 size=5242880: e2e-final (mutate=2) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 524288 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=2
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=524288 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=2
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=146 fail=4 availability=97.33%
+upload latency: min=255.627023ms p50=277.117293ms p95=311.598509ms p99=319.95063ms max=327.509808ms mean=279.086385ms
+fetch latency:  min=4.891514ms p50=12.375186ms p95=18.32684ms p99=20.736282ms max=21.410878ms mean=12.696535ms
+upload throughput: mean=18.84 MB/s p95=20.16 MB/s total-bytes=786432000
+fetch throughput:  mean=440.70 MB/s p95=647.39 MB/s total-bytes=765460480
+status: OK
+
+===== sweep chunk=1048576 size=2097152: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 1048576 --size 2097152 --keep-local 0.50 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=147 fail=3 availability=98.00%
+upload latency: min=89.40115ms p50=99.503372ms p95=113.527969ms p99=120.154302ms max=128.114437ms mean=100.530917ms
+fetch latency:  min=723.341µs p50=13.68821ms p95=18.689019ms p99=20.363491ms max=23.751136ms mean=13.188725ms
+upload throughput: mean=20.95 MB/s p95=22.62 MB/s total-bytes=314572800
+fetch throughput:  mean=213.51 MB/s p95=500.33 MB/s total-bytes=308281344
+status: OK
+
+===== sweep chunk=1048576 size=5242880: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 1048576 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=148 fail=2 availability=98.67%
+upload latency: min=210.83496ms p50=229.294504ms p95=246.210702ms p99=257.399199ms max=261.628467ms mean=230.195242ms
+fetch latency:  min=3.730261ms p50=15.395635ms p95=20.778336ms p99=24.581785ms max=29.145351ms mean=15.157825ms
+upload throughput: mean=22.81 MB/s p95=24.24 MB/s total-bytes=786432000
+fetch throughput:  mean=384.44 MB/s p95=645.66 MB/s total-bytes=775946240
+status: OK
+
+===== sweep size=1048576: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 1048576 --chunk 1048576 --keep-local 0.50 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=1048576 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=149 fail=1 availability=99.33%
+upload latency: min=43.295734ms p50=50.692149ms p95=57.562848ms p99=62.010574ms max=64.320233ms mean=50.921872ms
+fetch latency:  min=424.271µs p50=11.517515ms p95=16.222152ms p99=19.269897ms max=19.389698ms mean=10.125076ms
+upload throughput: mean=20.73 MB/s p95=23.39 MB/s total-bytes=157286400
+fetch throughput:  mean=226.01 MB/s p95=608.31 MB/s total-bytes=156237824
+status: OK
+
+===== sweep size=5242880: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 5242880 --chunk 1048576 --keep-local 0.50 --reuse-base=true --mutate=1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=1
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=147 fail=3 availability=98.00%
+upload latency: min=206.552229ms p50=230.156888ms p95=255.991184ms p99=277.23743ms max=283.742039ms mean=231.220579ms
+fetch latency:  min=3.140155ms p50=15.817952ms p95=20.485163ms p99=21.334882ms max=21.882174ms mean=15.43298ms
+upload throughput: mean=22.74 MB/s p95=24.38 MB/s total-bytes=786432000
+fetch throughput:  mean=383.16 MB/s p95=587.20 MB/s total-bytes=770703360
+status: OK
+
+===== sweep size=20971520: e2e-final (mutate=3) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 20971520 --chunk 1048576 --keep-local 0.50 --reuse-base=true --mutate=3
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=20971520 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=3
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=142 fail=8 availability=94.67%
+upload latency: min=858.235517ms p50=903.62ms p95=950.306662ms p99=965.122111ms max=990.329389ms mean=907.573367ms
+fetch latency:  min=13.58834ms p50=25.509187ms p95=37.008768ms p99=43.336203ms max=45.309524ms mean=26.393438ms
+upload throughput: mean=23.12 MB/s p95=24.01 MB/s total-bytes=3145728000
+fetch throughput:  mean=842.96 MB/s p95=1196.08 MB/s total-bytes=2977955840
+status: OK
+
+All runs complete. Report: /home/andrii/repo/peerdrive/reports/final_experiments_2025-11-23_23-47-20.log

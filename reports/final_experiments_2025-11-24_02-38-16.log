@@ -1,0 +1,62 @@
+
+===== sweep chunk=262144 size=2097152: e2e-final (mutate=5) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 2097152 --keep-local 0.50 --reuse-base=true --mutate=5
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=5
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=145 fail=5 availability=96.67%
+upload latency: min=125.133943ms p50=143.799591ms p95=168.481166ms p99=185.155046ms max=246.226769ms mean=147.182381ms
+fetch latency:  min=4.699278ms p50=9.35191ms p95=13.334876ms p99=17.513038ms max=17.950495ms mean=9.691923ms
+upload throughput: mean=14.36 MB/s p95=15.69 MB/s total-bytes=314572800
+fetch throughput:  mean=230.27 MB/s p95=331.81 MB/s total-bytes=304087040
+status: OK
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=11) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=11
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=11
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=145 fail=5 availability=96.67%
+upload latency: min=318.111271ms p50=342.667758ms p95=395.067337ms p99=404.810283ms max=410.34732ms mean=350.135092ms
+fetch latency:  min=5.68003ms p50=12.488058ms p95=19.633254ms p99=24.029935ms max=25.875359ms mean=13.090702ms
+upload throughput: mean=15.03 MB/s p95=16.00 MB/s total-bytes=786432000
+fetch throughput:  mean=432.01 MB/s p95=671.69 MB/s total-bytes=760217600
+status: OK
+
+===== sweep chunk=262144 size=20971520: e2e-final (mutate=41) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 20971520 --keep-local 0.50 --reuse-base=true --mutate=41
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=20971520 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=41
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+status: FAILED (exit=130)
+
+===== sweep chunk=524288 size=2097152: e2e-final (mutate=3) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 524288 --size 2097152 --keep-local 0.50 --reuse-base=true --mutate=3
+status: FAILED (exit=130)
+
+===== sweep chunk=524288 size=5242880: e2e-final (mutate=6) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 524288 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=6
+status: FAILED (exit=130)
+
+===== sweep chunk=524288 size=20971520: e2e-final (mutate=21) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 524288 --size 20971520 --keep-local 0.50 --reuse-base=true --mutate=21
+status: FAILED (exit=130)
+
+===== sweep chunk=1048576 size=2097152: e2e-final (mutate=2) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 1048576 --size 2097152 --keep-local 0.50 --reuse-base=true --mutate=2
+status: FAILED (exit=130)
+
+===== sweep chunk=1048576 size=5242880: e2e-final (mutate=3) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 1048576 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=3
+status: FAILED (exit=130)
+
+===== sweep chunk=1048576 size=20971520: e2e-final (mutate=11) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 1048576 --size 20971520 --keep-local 0.50 --reuse-base=true --mutate=11
+status: FAILED (exit=130)
+
+All runs complete. Report: /home/andrii/repo/peerdrive/reports/final_experiments_2025-11-24_02-38-16.log

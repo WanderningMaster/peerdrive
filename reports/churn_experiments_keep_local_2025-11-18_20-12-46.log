@@ -1,0 +1,35 @@
+
+===== sweep keep-local=0.10: e2e-churn =====
+cmd: go_e2e_churn --keep-local 0.10
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.10
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=147 fail=3 availability=98.00%
+latency: min=813.6µs p50=46.717781ms p95=69.916999ms p99=73.071331ms max=154.873876ms mean=45.663053ms
+status: OK
+
+===== sweep keep-local=0.70: e2e-churn =====
+cmd: go_e2e_churn --keep-local 0.70
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.70
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=148 fail=2 availability=98.67%
+latency: min=909.518µs p50=45.041343ms p95=67.007028ms p99=70.978151ms max=81.275418ms mean=44.900467ms
+status: OK
+
+===== sweep keep-local=0.90: e2e-churn =====
+cmd: go_e2e_churn --keep-local 0.90
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.90
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=147 fail=3 availability=98.00%
+latency: min=647.199µs p50=43.685379ms p95=63.099347ms p99=79.311989ms max=94.769788ms mean=44.122423ms
+status: OK
+
+All runs complete. Report: /home/andrii/repo/peerdrive/reports/churn_experiments_keep_local_2025-11-18_20-12-46.log

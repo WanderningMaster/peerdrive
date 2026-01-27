@@ -1,0 +1,134 @@
+
+===== sweep chunk=262144: e2e-churn =====
+cmd: go_e2e_churn --chunk 262144 --keep-local=0.5
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=143 fail=7 availability=95.33%
+latency: min=22.372834ms p50=47.216739ms p95=65.364704ms p99=94.491392ms max=112.764723ms mean=48.49193ms
+status: OK
+
+===== sweep chunk=262144: e2e-local-churn =====
+cmd: go_e2e_local_churn --chunk 262144
+=== Configuration (local-only with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=130 fail=20 availability=86.67%
+latency: min=37.706578ms p50=54.548099ms p95=67.997302ms p99=71.238807ms max=72.769895ms mean=53.874063ms
+status: OK
+
+===== sweep chunk=524288: e2e-churn =====
+cmd: go_e2e_churn --chunk 524288 --keep-local=0.5
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=524288 fanout=256 fetch-par=16 keep-local=0.50
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=145 fail=5 availability=96.67%
+latency: min=8.588891ms p50=46.297958ms p95=65.635336ms p99=74.193732ms max=105.95984ms mean=45.712005ms
+status: OK
+
+===== sweep chunk=524288: e2e-local-churn =====
+cmd: go_e2e_local_churn --chunk 524288
+=== Configuration (local-only with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=524288 fanout=256 fetch-par=16
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=134 fail=16 availability=89.33%
+latency: min=26.632676ms p50=53.606603ms p95=68.295071ms p99=71.878012ms max=75.245739ms mean=53.30998ms
+status: OK
+
+===== sweep chunk=1048576: e2e-churn =====
+cmd: go_e2e_churn --chunk 1048576 --keep-local=0.5
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=146 fail=4 availability=97.33%
+latency: min=8.384756ms p50=44.115294ms p95=70.60636ms p99=82.329735ms max=111.05859ms mean=45.648832ms
+status: OK
+
+===== sweep chunk=1048576: e2e-local-churn =====
+cmd: go_e2e_local_churn --chunk 1048576
+=== Configuration (local-only with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=137 fail=13 availability=91.33%
+latency: min=32.00387ms p50=56.535536ms p95=69.445678ms p99=73.205737ms max=75.342534ms mean=56.23791ms
+status: OK
+
+===== sweep chunk=262144: e2e-churn =====
+cmd: go_e2e_churn --chunk 262144 --size 5242880 --keep-local=0.5
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=133 fail=17 availability=88.67%
+latency: min=24.622839ms p50=56.125974ms p95=91.724074ms p99=119.877475ms max=134.155295ms mean=57.566828ms
+status: OK
+
+===== sweep chunk=262144: e2e-local-churn =====
+cmd: go_e2e_local_churn --chunk 262144 --size 5242880
+=== Configuration (local-only with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=16
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=133 fail=17 availability=88.67%
+latency: min=45.890178ms p50=63.320036ms p95=76.076386ms p99=78.386437ms max=84.133238ms mean=63.645503ms
+status: OK
+
+===== sweep chunk=524288: e2e-churn =====
+cmd: go_e2e_churn --chunk 524288 --size 5242880 --keep-local=0.5
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=524288 fanout=256 fetch-par=16 keep-local=0.50
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=139 fail=11 availability=92.67%
+latency: min=21.842995ms p50=48.100985ms p95=67.844016ms p99=73.885662ms max=96.385888ms mean=48.830381ms
+status: OK
+
+===== sweep chunk=524288: e2e-local-churn =====
+cmd: go_e2e_local_churn --chunk 524288 --size 5242880
+=== Configuration (local-only with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=524288 fanout=256 fetch-par=16
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=139 fail=11 availability=92.67%
+latency: min=36.59079ms p50=57.090337ms p95=69.298018ms p99=71.595144ms max=73.912983ms mean=56.972531ms
+status: OK
+
+===== sweep chunk=1048576: e2e-churn =====
+cmd: go_e2e_churn --chunk 1048576 --size 5242880 --keep-local=0.5
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=144 fail=6 availability=96.00%
+latency: min=20.505419ms p50=51.20463ms p95=74.442446ms p99=90.409828ms max=154.922003ms mean=52.426693ms
+status: OK
+
+===== sweep chunk=1048576: e2e-local-churn =====
+cmd: go_e2e_local_churn --chunk 1048576 --size 5242880
+=== Configuration (local-only with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=1048576 fanout=256 fetch-par=16
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=150 success=140 fail=10 availability=93.33%
+latency: min=36.975815ms p50=59.043624ms p95=71.527013ms p99=74.678788ms max=76.313286ms mean=58.350241ms
+status: OK
+
+All runs complete. Report: /home/andrii/repo/peerdrive/reports/churn_experiments_2025-11-18_21-40-19.log

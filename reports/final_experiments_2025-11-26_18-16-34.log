@@ -1,0 +1,30 @@
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=11) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 10 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=11 --nodes=50
+=== Configuration (with churn) ===
+nodes=50 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=10 keep-local=0.50 reuse-base=true mutate=11
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=145 fail=5 availability=96.67%
+upload latency: min=309.744347ms p50=336.410772ms p95=365.215279ms p99=380.8095ms max=413.351118ms mean=338.524424ms
+fetch latency:  min=9.547297ms p50=18.811005ms p95=25.660058ms p99=27.929624ms max=29.169128ms mean=19.033101ms
+upload throughput: mean=15.52 MB/s p95=16.34 MB/s total-bytes=786432000
+fetch throughput:  mean=290.34 MB/s p95=406.83 MB/s total-bytes=760217600
+status: OK
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=11) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 20 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=11 --nodes=50
+=== Configuration (with churn) ===
+nodes=50 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=20 keep-local=0.50 reuse-base=true mutate=11
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=146 fail=4 availability=97.33%
+upload latency: min=312.219311ms p50=337.138144ms p95=365.894605ms p99=379.40582ms max=384.73305ms mean=339.809035ms
+fetch latency:  min=9.133276ms p50=19.013082ms p95=25.050269ms p99=28.9625ms max=32.71191ms mean=18.978689ms
+upload throughput: mean=15.45 MB/s p95=16.28 MB/s total-bytes=786432000
+fetch throughput:  mean=290.37 MB/s p95=411.63 MB/s total-bytes=765460480
+status: OK
+
+All runs complete. Report: /home/andrii/repo/peerdrive/reports/final_experiments_2025-11-26_18-16-34.log

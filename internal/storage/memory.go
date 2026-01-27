@@ -15,13 +15,13 @@ var (
 )
 
 type MemStore struct {
-    mu       sync.RWMutex
-    store    map[block.CID][]byte
-    // value: 'r' recursive, 'd' direct
-    hardPins map[block.CID]byte
-    softPins map[block.CID]time.Time // expiry time
-    fetcher  BlockFetcher
-    softTTL  time.Duration
+	mu    sync.RWMutex
+	store map[block.CID][]byte
+	// value: 'r' recursive, 'd' direct
+	hardPins map[block.CID]byte
+	softPins map[block.CID]time.Time // expiry time
+	fetcher  BlockFetcher
+	softTTL  time.Duration
 }
 
 func WithFetcher(fetcher BlockFetcher) func(*MemStore) {
@@ -35,11 +35,11 @@ func WithSoftTTL(ttl time.Duration) func(*MemStore) {
 }
 
 func NewMemStore(options ...func(*MemStore)) *MemStore {
-    m := &MemStore{
-        store:    make(map[block.CID][]byte),
-        hardPins: make(map[block.CID]byte),
-        softPins: make(map[block.CID]time.Time),
-    }
+	m := &MemStore{
+		store:    make(map[block.CID][]byte),
+		hardPins: make(map[block.CID]byte),
+		softPins: make(map[block.CID]time.Time),
+	}
 	for _, o := range options {
 		o(m)
 	}
@@ -160,21 +160,23 @@ func (s *MemStore) Pin(ctx context.Context, c block.CID) error {
 	if err := ctx.Err(); err != nil {
 		return err
 	}
-    s.mu.Lock()
-    s.hardPins[c] = 'r'
-    // promote to hard pin: remove any soft pin
-    delete(s.softPins, c)
-    s.mu.Unlock()
-    return nil
+	s.mu.Lock()
+	s.hardPins[c] = 'r'
+	// promote to hard pin: remove any soft pin
+	delete(s.softPins, c)
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *MemStore) PinDirect(ctx context.Context, c block.CID) error {
-    if err := ctx.Err(); err != nil { return err }
-    s.mu.Lock()
-    s.hardPins[c] = 'd'
-    delete(s.softPins, c)
-    s.mu.Unlock()
-    return nil
+	if err := ctx.Err(); err != nil {
+		return err
+	}
+	s.mu.Lock()
+	s.hardPins[c] = 'd'
+	delete(s.softPins, c)
+	s.mu.Unlock()
+	return nil
 }
 
 func (s *MemStore) PinSoft(ctx context.Context, c block.CID) error {
@@ -194,7 +196,7 @@ func (s *MemStore) Unpin(ctx context.Context, c block.CID) error {
 		return err
 	}
 	s.mu.Lock()
-    delete(s.hardPins, c)
+	delete(s.hardPins, c)
 	delete(s.softPins, c)
 	s.mu.Unlock()
 	return nil
@@ -207,10 +209,10 @@ func (s *MemStore) ListPins(ctx context.Context) ([]block.CID, error) {
 	s.mu.RLock()
 	defer s.mu.RUnlock()
 	out := make([]block.CID, 0, len(s.hardPins))
-    for c := range s.hardPins {
-        out = append(out, c)
-    }
-    return out, nil
+	for c := range s.hardPins {
+		out = append(out, c)
+	}
+	return out, nil
 }
 
 func (s *MemStore) GC(ctx context.Context) (int, error) {
@@ -219,23 +221,33 @@ func (s *MemStore) GC(ctx context.Context) (int, error) {
 	}
 
 	s.mu.RLock()
-    recPins := make([]block.CID, 0, len(s.hardPins))
-    dirPins := make([]block.CID, 0, len(s.hardPins))
-    for c, mode := range s.hardPins {
-        if mode == 'd' { dirPins = append(dirPins, c) } else { recPins = append(recPins, c) }
-    }
-    now := time.Now()
-    for c, exp := range s.softPins { if now.Before(exp) { dirPins = append(dirPins, c) } }
-    keysSnap := make([]block.CID, 0, len(s.store))
-    for c := range s.store {
-        keysSnap = append(keysSnap, c)
-    }
-    s.mu.RUnlock()
+	recPins := make([]block.CID, 0, len(s.hardPins))
+	dirPins := make([]block.CID, 0, len(s.hardPins))
+	for c, mode := range s.hardPins {
+		if mode == 'd' {
+			dirPins = append(dirPins, c)
+		} else {
+			recPins = append(recPins, c)
+		}
+	}
+	now := time.Now()
+	for c, exp := range s.softPins {
+		if now.Before(exp) {
+			dirPins = append(dirPins, c)
+		}
+	}
+	keysSnap := make([]block.CID, 0, len(s.store))
+	for c := range s.store {
+		keysSnap = append(keysSnap, c)
+	}
+	s.mu.RUnlock()
 
-    live := make(map[block.CID]struct{}, (len(recPins)+len(dirPins))*4)
-    stack := make([]block.CID, 0, len(recPins))
-    for _, c := range dirPins { live[c] = struct{}{} }
-    stack = append(stack, recPins...)
+	live := make(map[block.CID]struct{}, (len(recPins)+len(dirPins))*4)
+	stack := make([]block.CID, 0, len(recPins))
+	for _, c := range dirPins {
+		live[c] = struct{}{}
+	}
+	stack = append(stack, recPins...)
 
 	for len(stack) > 0 {
 		// pop

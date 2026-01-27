@@ -1,0 +1,35 @@
+
+===== sweep keep-local=0.20: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 2097152 --chunk 262144 --keep-local 0.20 --reuse-base true --mutate 1
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=262144 fanout=256 fetch-par=16 keep-local=0.20 reuse-base=true mutate=0
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+status: FAILED (exit=130)
+
+===== sweep keep-local=0.50: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 2097152 --chunk 262144 --keep-local 0.50 --reuse-base true --mutate 1
+status: FAILED (exit=130)
+
+===== sweep keep-local=0.90: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --size 2097152 --chunk 262144 --keep-local 0.90 --reuse-base true --mutate 1
+status: FAILED (exit=130)
+
+===== sweep chunk=262144 size=2097152: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 2097152 --keep-local 0.50 --reuse-base true --mutate 1
+status: FAILED (exit=130)
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=3) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base true --mutate 3
+status: FAILED (exit=130)
+
+===== sweep chunk=524288 size=2097152: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 524288 --size 2097152 --keep-local 0.50 --reuse-base true --mutate 1
+status: FAILED (exit=130)
+
+===== sweep chunk=524288 size=5242880: e2e-final (mutate=2) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 524288 --size 5242880 --keep-local 0.50 --reuse-base true --mutate 2
+status: FAILED (exit=130)
+
+===== sweep chunk=1048576 size=2097152: e2e-final (mutate=1) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 1048576 --size 2097152 --keep-local 0.50 --reuse-base true --mutate 1

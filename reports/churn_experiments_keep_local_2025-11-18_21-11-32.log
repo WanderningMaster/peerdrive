@@ -1,0 +1,32 @@
+
+===== sweep keep-local=0.20: e2e-churn =====
+cmd: go_e2e_churn --keep-local 0.20
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.20
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=300 success=293 fail=7 availability=97.67%
+latency: min=1.070004ms p50=44.120783ms p95=64.998129ms p99=74.044467ms max=109.517961ms mean=43.921848ms
+status: OK
+
+===== sweep keep-local=0.50: e2e-churn =====
+cmd: go_e2e_churn --keep-local 0.50
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.50
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+=== Results ===
+trials=300 success=292 fail=8 availability=97.33%
+latency: min=773.563µs p50=47.335704ms p95=68.706123ms p99=107.695573ms max=162.361665ms mean=47.749742ms
+status: OK
+
+===== sweep keep-local=0.90: e2e-churn =====
+cmd: go_e2e_churn --keep-local 0.90
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=2097152 chunk=1048576 fanout=256 fetch-par=16 keep-local=0.90
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[2ms..20ms]
+status: FAILED (exit=130)
+
+All runs complete. Report: /home/andrii/repo/peerdrive/reports/churn_experiments_keep_local_2025-11-18_21-11-32.log

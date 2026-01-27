@@ -1,0 +1,44 @@
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=11) =====
+cmd: go_e2e_final --nodes 5 --trials 150 --fetch-par 16 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=11 --nodes=5
+=== Configuration (with churn) ===
+nodes=5 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=11
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=89 fail=61 availability=59.33%
+upload latency: min=12.103977ms p50=124.145161ms p95=281.41856ms p99=386.965407ms max=389.123765ms mean=141.462967ms
+fetch latency:  min=5.317824ms p50=10.750397ms p95=16.39836ms p99=17.473774ms max=19.666934ms mean=10.898334ms
+upload throughput: mean=52.81 MB/s p95=98.54 MB/s total-bytes=786432000
+fetch throughput:  mean=520.89 MB/s p95=757.04 MB/s total-bytes=466616320
+status: OK
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=11) =====
+cmd: go_e2e_final --nodes 10 --trials 150 --fetch-par 16 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=11 --nodes=10
+=== Configuration (with churn) ===
+nodes=10 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=11
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=118 fail=32 availability=78.67%
+upload latency: min=252.018414ms p50=370.729206ms p95=480.490311ms p99=533.311346ms max=554.603391ms mean=377.172584ms
+fetch latency:  min=3.588567ms p50=9.506312ms p95=18.786019ms p99=20.744629ms max=25.000927ms mean=10.513198ms
+upload throughput: mean=14.28 MB/s p95=18.29 MB/s total-bytes=786432000
+fetch throughput:  mean=583.75 MB/s p95=997.00 MB/s total-bytes=618659840
+status: OK
+
+===== sweep chunk=262144 size=5242880: e2e-final (mutate=11) =====
+cmd: go_e2e_final --nodes 25 --trials 150 --fetch-par 16 --chunk 262144 --size 5242880 --keep-local 0.50 --reuse-base=true --mutate=11 --nodes=25
+=== Configuration (with churn) ===
+nodes=25 basePort=9100 size=5242880 chunk=262144 fanout=256 fetch-par=16 keep-local=0.50 reuse-base=true mutate=11
+K=20 alpha=5 replicas=5 rpc=10s refresh=1h0m0s ttl=24h0m0s republish=12h0m0s gc=1m0s revalidate=10m0s maxValue=1048576 failThresh=3 softTTL=6h0m0s
+churn: interval=250ms prob=1.00 after=2s peers=5 down-time=[200ms..1.5s] serve-delay=[0s..0s]
+=== Results ===
+trials=150 success=137 fail=13 availability=91.33%
+upload latency: min=312.335935ms p50=344.120273ms p95=399.621037ms p99=425.718325ms max=477.309846ms mean=351.300127ms
+fetch latency:  min=4.703614ms p50=12.906694ms p95=20.138618ms p99=21.849208ms max=24.164888ms mean=13.494539ms
+upload throughput: mean=15.00 MB/s p95=16.37 MB/s total-bytes=786432000
+fetch throughput:  mean=421.78 MB/s p95=623.22 MB/s total-bytes=718274560
+status: OK
+
+All runs complete. Report: /home/andrii/repo/peerdrive/reports/final_experiments_2025-11-24_02-52-53.log

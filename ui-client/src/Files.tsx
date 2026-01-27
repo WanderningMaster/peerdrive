@@ -27,7 +27,6 @@ export default function FilesPage() {
   const [storeBlocks, setStoreBlocks] = useState<number | null>(null);
   const [storeBytes, setStoreBytes] = useState<number | null>(null);
   const [gcBusy, setGcBusy] = useState(false);
-  const [gcMessage, setGcMessage] = useState("");
 
   function formatBytes(n?: number): string {
     if (typeof n !== "number" || !isFinite(n) || n < 0) return "—";
@@ -79,9 +78,7 @@ export default function FilesPage() {
   async function runGC() {
     try {
       setGcBusy(true);
-      setGcMessage("");
-      const freed = await invoke<number>("gc_store");
-      setGcMessage(`Freed ${freed} blocks`);
+      await invoke<number>("gc_store");
       await loadPins();
     } catch (e: any) {
       setError(String(e));
@@ -118,7 +115,6 @@ export default function FilesPage() {
   }
 
   async function onUpload() {
-    try {
       setError("");
       setUploading(true);
       const selection = await open({ multiple: false, directory: false });
@@ -126,13 +122,11 @@ export default function FilesPage() {
       const path = Array.isArray(selection) ? selection[0] : selection;
       if (typeof path !== "string" || path.trim() === "") return;
       const compress = getUploadMode() === "distributed";
-      await invoke<string>("add_and_pin_file", { path, compress });
-      await loadPins();
-    } catch (e: any) {
-      setError(String(e));
-    } finally {
-      setUploading(false);
-    }
+      invoke<string>("add_and_pin_file", { path, compress })
+        .then(() => {
+          loadPins()
+        }).catch((e) => setError(String(e)))
+        .finally(() => setUploading(false));
   }
   function closePreview() {
     setPreviewCid(null);
